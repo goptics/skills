@@ -9,7 +9,7 @@ description: >
 user-invocable: true
 compatibility: Requires a shell, network access to vizb.goptics.org, and permission to run the vizb install script if vizb is missing.
 metadata:
-  version: v0.1.0
+  version: v0.2.0
 ---
 
 # vizb
@@ -47,8 +47,12 @@ If the job is merging vizb JSON datasets, run `vizb merge` (do not default to `v
 Default:
 
 ```bash
-vizb <chart> <input> -o <out>.html
+vizb <chart> <input> -n "<name>" -d "<one line>" -o <out>.html
 ```
+
+Always set `-n` (short dataset title) and `-d` (one-sentence description). Infer from the file and the request. Do not leave the default name.
+
+Nested JSON (object wrapping an array): `--json-path '.a.b'` on vizb. Do not jq. Do not rewrite the file into a top-level array. Unsure of the path → fetch https://vizb.goptics.org/guides/data.md.
 
 Leave the parser on `auto`. Do not add `--group`, `--select`, `--group-pattern`, units, filter, or `--stat` unless the user asked or auto output is wrong. Read vizb’s inference log before adding flags.
 
@@ -98,6 +102,10 @@ Fetch **one** page, not the whole site. Start with https://vizb.goptics.org/llms
 | Install edge cases | https://vizb.goptics.org/getting-started/install.md |
 
 Never fetch GitHub raw MDX. Never dump `llms-full.txt` unless the user asked for a full dump.
+
+## 7. After
+
+Return the HTML path. Then ask **one** follow-up about unused extras the user may like. Pick 1–2 this run skipped: stats, labels, stack, 3D, another chart type, theme, merge. One question, not a catalog. Skip if they already declined.
 
 ## Errors
 
