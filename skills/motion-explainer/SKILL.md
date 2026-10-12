@@ -115,11 +115,11 @@ Then:
 
 - **In:** approved SVGs, chosen ratio(s).
 - **Do:**
-  1. Copy the engine: `mkdir -p assets/explainers/reel && cp $SKILL/reel/* assets/explainers/reel/ && (cd assets/explainers/reel && npm install)`.
-  2. Write `scenes.json`: one scene per concept (title, code or points, diagram, loop `offset`, caption). First scene visible at frame 0, no intro card.
+  1. Copy the engine: `mkdir -p assets/explainers/reel && cp $SKILL/reel/index.html $SKILL/reel/cover.html $SKILL/reel/render.mjs $SKILL/reel/package.json assets/explainers/reel/ && (cd assets/explainers/reel && npm install)`.
+  2. Write `scenes.json` (schema at the top of `index.html`): `sizes` = the chosen ratio(s); one scene per concept (title, code or points, diagram, loop `offset`, caption); an outro; a `cover` block. First scene visible at frame 0, no intro card.
   3. Write `SCRIPT.md`: voice-over per scene, ~2.5 words/s.
-  4. Check stills at each scene midpoint: `node render.mjs --at <t1>,<t2>,...`. Look at them: safe zones, text size, diagram aligned with the code panel margins.
-  5. Render: `node render.mjs` (MP4 + SRT), then `node render.mjs --cover`.
+  4. Check stills at each scene midpoint: `node render.mjs --at <t1>,<t2>,...` (per size). Look at them: safe zones, text size, diagram aligned with the code panel margins.
+  5. Render: `node render.mjs` (MP4 + SRT per size), then `node render.mjs --cover`. `node render.mjs --serve` plays it live for screen recording.
 - **Out:** `reel.mp4`, `reel.srt`, `cover.png`, `SCRIPT.md`.
 - **Reference:** `references/reel.md` (safe zones, pacing, offsets, cover, script format).
 

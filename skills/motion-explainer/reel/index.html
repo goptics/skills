@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Explainer reel</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3; --muted: #9198a1;
+    --accent: #3fb950; --mark: rgba(210, 153, 34, .28); --mark-line: #d29922;
+    --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e; --num: #79c0ff; --fn: #d2a8ff; --pkg: #ffa657;
+    --sans: system-ui, -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "JetBrains Mono", "DejaVu Sans Mono", "Noto Sans Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { background: #000; }
+  body { display: grid; place-items: center; min-height: 100vh; }
+  #stage { position: relative; overflow: hidden; background: var(--bg); color: var(--fg); font-family: var(--sans); }
+  .render #stage { cursor: none; }
+  #progress { position: absolute; left: 0; top: 0; height: 8px; width: 100%; background: var(--accent); transform-origin: left; z-index: 2; }
+
+  .scene { position: absolute; inset: 0; opacity: 0; }
+  .head { position: absolute; }
+  .chip { display: inline-block; font: 600 var(--chip) var(--mono); color: var(--accent); border: 2px solid var(--accent); border-radius: 999px; padding: 6px 22px; }
+  .title { font-size: var(--title); font-weight: 800; letter-spacing: -1px; margin-top: 22px; }
+  .body { position: absolute; left: 0; width: 100%; transform-origin: 50% 0; }
+  pre, .points { position: absolute; background: var(--panel); border: 2px solid var(--border); border-radius: 22px; padding: 34px 36px; font: var(--code)/1.5 var(--mono); color: var(--fg); white-space: pre; }
+  pre .ln { display: block; min-height: 1.5em; }
+  .points { white-space: normal; font: 600 var(--cap)/1.3 var(--sans); display: flex; flex-direction: column; gap: .6em; }
+  .points .ln::before { content: "→ "; color: var(--accent); }
+  .points code, .cap code { font: 600 .9em var(--mono); color: var(--pkg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); } .num { color: var(--num); } .fn { color: var(--fn); } .pkg { color: var(--pkg); }
+  mark { color: inherit; background: var(--mark); border-radius: 6px; padding: 0 4px; outline: 2px solid transparent; }
+  .diagram { position: absolute; border: 2px solid var(--border); border-radius: 21px; transform-origin: 0 0; }
+  .cap { position: absolute; font-size: var(--cap); line-height: 1.25; font-weight: 700; }
+
+  .center { position: absolute; left: 60px; right: 60px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 48px; }
+  .center img { width: 760px; max-width: 100%; }
+  .center pre { position: static; font-size: calc(var(--code) + 4px); }
+  .center .line { font-size: var(--cap); font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="progress"></div></div>
+<script>
+// One timeline (seconds), built from scenes.json. Every motion is a Web Animation or a CSS animation inside a
+// diagram, so seek(t) can put the whole reel at any frame: live mode drives it from rAF, render.mjs frame by frame.
+//   ?size=9:16|16:9|1:1  picks the layout (default: scenes.json "size", else 9:16)   ?render  hands control to render.mjs
+// 9:16 keeps text clear of the bottom ~350px and right ~120px, where the platforms draw their UI.
+//
+// scenes.json: { title, size | sizes: ["9:16", "16:9", "1:1"], lang (default code language), packages: [names
+//   coloured as packages before "." or "::"], colors: { accent: "#…", … CSS variables }, root (served folder, default ".."),
+//   scenes: [ { duration (s), step ("1 / 4"), title, code (⟦…⟧ marks a highlight) | points: [HTML lines], lang,
+//               diagram (path from this folder), offset (s into the diagram's loop at scene start), caption (HTML) },
+//             { duration, type: "outro", logo, code (shell by default), lines: [HTML] } ],
+//   cover: see cover.html }
+// Languages: go, js/ts, python, rust, sh; anything else renders as plain text.
+const LAYOUTS = {
+  "9:16": { W: 1080, H: 1920, mode: "stack", pad: 40, head: [60, 110], title: 76, chip: 30, top: 330, code: 30, cap: 52, capInset: [60, 120], safe: 350 },
+  "1:1":  { W: 1080, H: 1080, mode: "stack", pad: 40, head: [60, 56], title: 56, chip: 24, top: 220, code: 24, cap: 38, capInset: [60, 60], safe: 50 },
+  "16:9": { W: 1920, H: 1080, mode: "side", pad: 60, head: [80, 60], title: 68, chip: 26, top: 250, code: 28, cap: 44, capInset: [80, 80], safe: 60, split: 860 },
+};
+const params = new URLSearchParams(location.search);
+const stage = document.getElementById("stage");
+const anims = [];          // page-level Web Animations, all on the reel timeline (delay = absolute start)
+const frames = [];         // { el, scene } diagram iframes, seeked separately
+const at = (el, keyframes, start, dur, easing = "cubic-bezier(.2, .7, .2, 1)") =>
+  anims.push(el.animate(keyframes, { delay: start * 1000, duration: dur * 1000, fill: "both", easing }));
+
+// ---- highlighter: one token regex per language; ⟦…⟧ marks a highlight ----
+const KW = {
+  go: "break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var",
+  js: "async await break case catch class const continue default delete do else export extends false finally for from function if import in instanceof interface let new null of return static super switch this throw true try type typeof undefined var void while yield",
+  py: "and as assert async await break class continue def del elif else except False finally for from global if import in is lambda None nonlocal not or pass raise return True try while with yield",
+  rs: "as async await break const continue crate dyn else enum Err extern false fn for if impl in let loop match mod move mut None Ok pub ref return Self self Some static struct super trait true type unsafe use where while",
+};
+const ALIAS = { golang: "go", ts: "js", typescript: "js", javascript: "js", tsx: "js", jsx: "js", python: "py", rust: "rs", bash: "sh", shell: "sh", zsh: "sh" };
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function tokenizer(lang, pkgs) {
+  const com = lang === "py" ? "#.*" : "\\/\\/.*";
+  const str = lang === "rs" ? '"(?:[^"\\\\]|\\\\.)*"' : lang === "go" ? '"(?:[^"\\\\]|\\\\.)*"|`[^`]*`'
+    : '"(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\'' + (lang === "js" ? "|`[^`]*`" : "");
+  const pkg = pkgs.length ? `\\b(${pkgs.join("|")})\\b(?=\\.|::)` : "(?!)";
+  return new RegExp(`(${com})|(${str})|\\b(${KW[lang].replace(/ /g, "|")})\\b|${pkg}|\\b(\\d[\\d_.]*)\\b|\\b([A-Za-z_]\\w*!?)(?=\\(|!\\()`, "g");
+}
+function highlight(line, lang, pkgs) {
+  lang = ALIAS[lang] ?? lang;
+  let html;
+  if (lang === "sh") {        // command (+ subcommand when there are arguments), strings, comments
+    html = esc(line).replace(/^(\s*)([\w./-]+(?:\s+[a-z][\w-]*(?=\s+\S))?)|("[^"]*"|'[^']*')|(#.*)$/g, (m, sp, cmd, s, c) =>
+      cmd ? `${sp}<span class="fn">${cmd}</span>` : `<span class="${s ? "str" : "com"}">${m}</span>`);
+  } else if (KW[lang]) {
+    html = esc(line).replace(tokenizer(lang, pkgs), (m, com, str, kw, pkg, num, fn) =>
+      `<span class="${com ? "com" : str ? "str" : kw ? "kw" : pkg ? "pkg" : num ? "num" : "fn"}">${m}</span>`);
+  } else html = esc(line);    // unknown language: plain text
+  return html.replace(/⟦/g, "<mark>").replace(/⟧/g, "</mark>");
+}
+
+// ---- build ----
+async function build() {
+  const R = await (await fetch("scenes.json")).json();
+  const L = LAYOUTS[params.get("size") ?? R.size ?? "9:16"];
+  if (!L) throw new Error(`unknown size ${params.get("size")}; use one of ${Object.keys(LAYOUTS)}`);
+  if (R.title) document.title = R.title;
+  for (const [k, v] of Object.entries(R.colors ?? {})) document.documentElement.style.setProperty(`--${k}`, v);
+  for (const k of ["title", "chip", "code", "cap"]) stage.style.setProperty(`--${k}`, `${L[k]}px`);
+  Object.assign(stage.style, { width: `${L.W}px`, height: `${L.H}px` });
+  const pkgs = R.packages ?? [];
+  let t = 0;
+  const SCENES = R.scenes.map(s => ({ ...s, start: t, end: (t += s.duration) }));
+  window.SCENES = SCENES; window.TOTAL = t; window.LAYOUT = L;
+
+  const sizeOf = async src => {   // diagram size from its viewBox, so layout is known before the iframe loads
+    const svg = await (await fetch(src)).text();
+    const vb = svg.match(/viewBox="\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)/);
+    return vb ? [+vb[1], +vb[2]] : [960, 420];
+  };
+
+  for (const s of SCENES) {
+    const el = document.createElement("div");
+    el.className = "scene";
+    stage.appendChild(el);
+    if (s.type === "outro") {
+      el.innerHTML = `<div class="center">${s.logo ? `<img src="${s.logo}" alt="">` : ""}
+        ${s.code ? `<pre>${highlight(s.code, s.lang ?? "sh", pkgs)}</pre>` : ""}
+        ${(s.lines ?? []).map(l => `<div class="line">${l}</div>`).join("")}</div>`;
+    } else {
+      const lines = s.code ? s.code.split("\n").map(l => `<span class="ln">${highlight(l, s.lang ?? R.lang, pkgs)}</span>`).join("")
+        : (s.points ?? []).map(p => `<div class="ln">${p}</div>`).join("");
+      el.innerHTML = `<div class="head">${s.step ? `<span class="chip">${s.step}</span>` : ""}<div class="title">${s.title ?? ""}</div></div>
+        <div class="body">${s.code ? `<pre>${lines}</pre>` : `<div class="points">${lines}</div>`}
+        ${s.diagram ? `<iframe class="diagram" src="${s.diagram}" scrolling="no" tabindex="-1"></iframe>` : ""}
+        ${s.caption ? `<div class="cap">${s.caption}</div>` : ""}</div>`;
+      Object.assign(el.querySelector(".head").style, { left: `${L.head[0]}px`, right: `${L.head[0]}px`, top: `${L.head[1]}px` });
+      await place(el, s, L, s.diagram && await sizeOf(s.diagram));
+      const f = el.querySelector(".diagram");
+      if (f) frames.push({ el: f, scene: s });
+    }
+
+    // scene in/out: 0.35s fade + slide; the first scene is already on screen at frame 0 (it is the reel's first impression)
+    const len = s.end - s.start, fr = .35 / len, enter = s.start ? { opacity: 0, transform: "translateY(24px)" } : { opacity: 1, transform: "none" };
+    at(el, [enter, { opacity: 1, transform: "none", offset: fr },
+            { opacity: 1, transform: "none", offset: 1 - fr }, { opacity: 0, transform: "translateY(-24px)" }], s.start, len, "linear");
+    if (s.type !== "outro") {
+      el.querySelectorAll(".ln").forEach((ln, i) =>
+        at(ln, [{ opacity: 0, transform: "translateX(-16px)" }, { opacity: 1, transform: "none" }], s.start + .3 + i * .12, .35));
+      const line = getComputedStyle(document.documentElement).getPropertyValue("--mark-line").trim();
+      el.querySelectorAll("mark").forEach(mk =>
+        at(mk, [{ outlineColor: "transparent" }, { outlineColor: line }, { outlineColor: "transparent" }], s.start + 1.6, 1.4));
+      const d = el.querySelector(".diagram"), c = el.querySelector(".cap");
+      if (d) at(d, [{ opacity: 0 }, { opacity: 1 }], s.start + .6, .5);
+      if (c) at(c, [{ opacity: 0, transform: "translateY(16px)" }, { opacity: 1, transform: "none" }], s.start + 1.2, .5);
+    }
+  }
+  at(document.getElementById("progress"), [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], 0, t, "linear");
+  anims.forEach(a => a.pause());
+}
+
+// Stack (9:16, 1:1): panel, diagram at the panel's width, caption, top to bottom.
+// Side (16:9): panel left, diagram right, caption under both. Either way the body shrinks to fit above the safe zone.
+async function place(el, s, L, dsize) {
+  const body = el.querySelector(".body"), panel = el.querySelector("pre, .points"), d = el.querySelector(".diagram"), cap = el.querySelector(".cap");
+  body.style.top = `${L.top}px`;
+  const inner = L.W - 2 * L.pad;
+  let bottom;
+  if (L.mode === "stack" || !d) {
+    Object.assign(panel.style, { left: `${L.pad}px`, right: `${L.pad}px`, top: "0px" });
+    bottom = panel.offsetHeight;
+    if (d) {
+      const k = inner / dsize[0];
+      Object.assign(d.style, { left: `${L.pad}px`, top: `${bottom + 44}px`, width: `${dsize[0]}px`, height: `${dsize[1]}px`, transform: `scale(${+k.toFixed(4)})` });
+      bottom += 44 + dsize[1] * +k.toFixed(4);
+    }
+  } else {
+    Object.assign(panel.style, { left: `${L.pad}px`, width: `${L.split}px`, top: "0px" });
+    const left = L.pad + L.split + 40, k = (L.W - L.pad - left) / dsize[0];
+    Object.assign(d.style, { left: `${left}px`, top: "0px", width: `${dsize[0]}px`, height: `${dsize[1]}px`, transform: `scale(${+k.toFixed(4)})` });
+    bottom = Math.max(panel.offsetHeight, dsize[1] * k);
+  }
+  if (cap) {
+    Object.assign(cap.style, { left: `${L.capInset[0]}px`, right: `${L.capInset[1]}px`, top: `${bottom + 48}px` });
+    bottom += 48 + cap.offsetHeight;
+  }
+  const room = L.H - L.safe - L.top;
+  if (bottom > room) body.style.transform = `scale(${room / bottom})`;
+  else if (L.mode === "side") body.style.top = `${L.top + (room - bottom) / 2}px`;   // wide frame: centre the block
+}
+
+// Diagrams follow prefers-color-scheme and prefers-reduced-motion; pin them to dark + full motion.
+function prepare(doc) {
+  for (const sheet of doc.styleSheets) for (const rule of sheet.cssRules) {
+    if (!rule.media) continue;
+    if (rule.media.mediaText.includes("prefers-color-scheme: dark")) rule.media.mediaText = "all";
+    if (rule.media.mediaText.includes("prefers-reduced-motion")) rule.media.mediaText = "not all";
+  }
+}
+window.ready = build().then(() => Promise.all(frames.map(({ el }) => new Promise(ok => {
+  const done = () => { prepare(el.contentDocument); ok(); };
+  el.contentDocument?.readyState === "complete" && el.contentDocument.styleSheets.length ? done() : el.addEventListener("load", done, { once: true });
+})).concat(document.fonts.ready, ...[...document.images].map(i => i.decode()))));
+
+window.seek = t => {
+  for (const a of anims) a.currentTime = t * 1000;
+  for (const { el, scene } of frames) {
+    if (t < scene.start - .5 || t > scene.end + .5) continue;
+    const local = Math.max(0, t - scene.start + (scene.offset ?? 0)) * 1000;
+    for (const a of el.contentDocument.getAnimations()) { a.pause(); a.currentTime = local; }
+  }
+};
+
+// Live mode: play in real time. ←/→ jump scenes, space pauses. ?render leaves control to render.mjs.
+if (params.has("render")) {
+  document.documentElement.classList.add("render");
+} else window.ready.then(() => {
+  const { W, H } = LAYOUT, fit = () => stage.style.zoom = Math.min(innerWidth / W, innerHeight / H);  // whole frame on screen
+  fit(); addEventListener("resize", fit);
+  document.body.style.overflow = "hidden";
+  let t0 = performance.now(), paused = null;
+  const now = () => paused ?? ((performance.now() - t0) / 1000) % TOTAL;
+  const jump = t => { t0 = performance.now() - t * 1000; if (paused !== null) paused = t; };
+  addEventListener("keydown", e => {
+    const t = now(), i = SCENES.findIndex(s => t >= s.start && t < s.end);
+    if (e.key === "ArrowRight") jump(SCENES[(i + 1) % SCENES.length].start);
+    else if (e.key === "ArrowLeft") jump(SCENES[t - SCENES[i].start < 1 ? Math.max(0, i - 1) : i].start);
+    else if (e.key === " ") { if (paused === null) paused = t; else { paused = null; jump(t); } }
+    else return;
+    e.preventDefault();
+  });
+  (function tick() { seek(now()); requestAnimationFrame(tick); })();
+});
+</script>
+</body>
+</html>
