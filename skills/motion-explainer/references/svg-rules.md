@@ -6,7 +6,8 @@ Load in phase 3. Each rule exists because breaking it broke a real diagram.
 
 - **Template** `<slug>.tpl.svg` = the static part: layout, boxes, labels, edges, colours. Copy it from `base.tpl.svg`.
 - **Generator** `gen_<slug>.py` = the timeline. It simulates the behaviour, calls `kfu.kf(id, points)` once per moving element, then `kfu.render(tpl, out, still=t)`.
-- `kfu.render` fills the slots: `{D}` (loop seconds), `{STILL}` (reduced-motion frame), `<!--LEGEND-->` (`kfu.LEGEND`), `/*KEYFRAMES*/`.
+- `kfu.render` fills the slots: `{D}` (loop seconds), `{STILL}` (reduced-motion frame), `<!--LEGEND-->` (`kfu.LEGEND` or `legend=`), `<!--ELEMENTS-->` (`kfu.elements`), `/*KEYFRAMES*/`.
+- Diagrams that share a layout can share one template: read it, `str.replace()` the differences, and pass the text to `kfu.render` instead of a path. Don't keep a template-generating script outside the project.
 - Times are authored in **seconds**. `kfu` converts them to `%` of the loop length `kfu.D`.
 - **Keyframe name == element `id`**, and the element needs class `a` (`<circle id="job0" class="a dot" .../>`).
 - Never hand-edit the generated SVG. Change the template or the generator and rebuild.
@@ -20,7 +21,9 @@ Load in phase 3. Each rule exists because breaking it broke a real diagram.
 | `Path(t, x, y, speed).to(x, y, op=).wait(dt)` | Constant-speed walk along straight segments; `op=0` hides the dot (inside a box) |
 | `flash(id, spans, peak)` | Glow on/off over `(start, end)` spans; overlapping spans merge |
 | `ring(id, times, gap)` | Wake-up pulse; pulses closer than `gap` coalesce |
-| `bar(id, spans)` | Progress bar that fills over each span |
+| `bar(id, spans)` | Progress bar / timer filling over each span; `(s, e, 0.4)` stops at 40% (cancelled); a span starting before the last one faded restarts it |
+| `states(prefix, [(t, i)], n)` | Changing text (state names, counters): draw one element per state, ids `prefix0..`, one shown at a time |
+| `kfu.elements.append(svg)` | Markup for elements whose count the simulation decides; filled into `<!--ELEMENTS-->` |
 | `Pool(limit, idle)` | Workers: `take(t)` (LIFO reuse, else spawn), `release(w, t, keep)`, `rows()` (alive vs ghost slot) |
 | `legend([(swatch, colour, label)])` | Legend markup; swatches `box`, `dot`, `bar`, `pip` |
 
@@ -47,7 +50,8 @@ GitHub shows README SVGs through `<img>`. That sandbox decides most rules.
   - what is dropped really is dropped (coalesced signals reach nobody);
   - every item that arrives is handled before the loop ends;
   - **end state == start state** (empty queues, the same idle workers). This is the seam.
-- Derive `kfu.D` from the simulation (last event + a calm tail of ~1.5 s), and assert that everything fits inside it.
+- Derive `kfu.D` from the simulation (last event + a calm tail of ~1.5 s), and assert that everything fits inside it. `kf()` stores seconds; they become % of the final `kfu.D` only at `render`, so set `D` whenever the simulation knows it.
+- When the real implementation can be called (a library function, a data structure), replay the scenario against it in the generator and assert the drawn state equals the real state after every step.
 - `if __name__ == "__main__":` print the simulated timeline (dispatch times, who handled what). Read it before you look at pixels.
 
 ## Seamless loop
@@ -55,6 +59,7 @@ GitHub shows README SVGs through `<img>`. That sandbox decides most rules.
 - The last frame must equal the first. Check the `seam` frame of the contact sheet against `t=0`.
 - Elements that exist only for part of the loop start and end with `opacity: 0`.
 - Things present from the start (an idle worker, a resident cache entry) must be present at the end too, at the same place.
+- **Systems that never return to their start state** (a connection that ends CLOSED, a cache that stays warm): end the run, hold the end state ~1 s, then cross-fade to the start state with a small "↻ replay" label. Assert the behaviour within the run as usual; the seam check then only proves the cross-fade, not a fact about the system. Say so in the storyboard.
 
 ## Layout
 
@@ -70,8 +75,9 @@ GitHub shows README SVGs through `<img>`. That sandbox decides most rules.
 
 - **One colour per role**, the same across every diagram in the set (e.g. yellow = waiting item, green = moving job, blue = busy worker, pink = signal, purple = coordinator, red = refusal).
 - Colours are CSS variables, swapped in `@media (prefers-color-scheme: dark)`. The `base.tpl.svg` palette meets contrast in both themes; extend it there, not with inline hex values.
+- Add your own classes **after** the base rules in `<style>`: with equal specificity the later rule wins, so a class placed earlier is silently overridden (e.g. by `.bar`).
 - Text keeps **WCAG AA 4.5:1** in both themes, **also while a glow flashes under it**. Keep glow opacity at .3 or below behind text.
-- Set the legend **once** for the whole set (`kfu.LEGEND = kfu.legend([...])` in a shared spot, or at the top of each generator). Only list roles the viewer sees moving.
+- Colours mean the same thing in every diagram of the set. Each diagram's legend lists only the roles it shows: `kfu.LEGEND = kfu.legend([...])` when all diagrams show the same roles, else pass `legend=kfu.legend([...])` per `render`.
 
 Quick contrast check (any two hex colours):
 
@@ -89,9 +95,14 @@ assert ratio("#59636e", "#ffffff") >= 4.5
 - `<title>`: what the diagram shows, one line. `<desc>`: the whole story in plain sentences, start state to end state. Screen readers and the reduced-motion still depend on it.
 - **Reduced motion.** `prefers-reduced-motion` pauses the animation on `still=` seconds. Pick the most informative moment (every slot busy, the reorder visible), not `t=0`, which is usually empty.
 
+## Time that can't be shown at real speed
+
+Real durations (a 4-minute timeout, a 30-day TTL) get compressed. Keep the order of events and the comparisons that matter (A expires before B), and add a small "times not to scale" note under the title.
+
 ## Checking
 
 - Build, then `python3 frames.py ../<name>-<slug>.svg` and **open both PNGs**.
+- The default 480 px cells show motion, not text. Check 2-3 frames at full size for legibility: `--at 2,6 --width 960 --cols 1`.
 - Per frame, compare against the storyboard timeline: right elements visible, right counts (queued items, alive workers), red labels only when the rule refuses.
 - Seam frame equals `t=0`. Text readable in both themes, also on glowing boxes.
 - For one exact moment: `--at 4.6`. Larger frames: `--width 960 --cols 1`.

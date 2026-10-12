@@ -37,6 +37,7 @@
     .dot { fill: var(--green); }
     .glow { fill: var(--blue); }
     .bar { fill: var(--blue); transform-origin: left center; }
+    /* your classes here, after the base rules: with equal specificity the later rule wins */
     /*KEYFRAMES*/
     @media (prefers-reduced-motion: reduce) { .a { animation-play-state: paused; animation-delay: -{STILL}s; } }
   </style>

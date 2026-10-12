@@ -47,15 +47,17 @@ Default root `assets/explainers/`. Use another folder only if the user asks.
 
 ```
 assets/explainers/
-  STORYBOARD.md              concepts, facts, invariants, timelines
+  STORYBOARD.md              concepts, facts, invariants, timelines, checkpoint changes
+  sources/                   saved copies of URL / pasted sources (cited by line)
   gen/                       engine copy + one generator per concept
     kfu.py  frames.py  base.tpl.svg
     gen_<slug>.py  <slug>.tpl.svg
-  <name>-<slug>.svg          generated; never hand-edit
+  <name>-<slug>.svg          generated; never hand-edit. <name> = short project name, <slug> = concept
+  frames/                    contact sheets and stills for checking (gitignored)
   reel/                      video engine copy + data
     index.html  cover.html  render.mjs  package.json
     scenes.json  SCRIPT.md
-    reel.mp4  reel.srt  cover.png   (generated)
+    reel.mp4  reel.srt  cover.png  still-*.png   (generated)
 ```
 
 The engine is **copied** into the project, not imported, so the outputs rebuild later without this skill.
@@ -75,12 +77,16 @@ Missing `python3` → stop and tell the user. Missing node, ffmpeg or Chrome →
 
 ## Phase 1: Understand
 
-- **In:** the content (repo, files, URL, pasted text) and the user's goal (README, talk, social post).
+- **In:** the content (repo, files, URL, pasted text) and the user's goal (README, talk, social post). No project around it (a spec, an article)? Use the current folder as the project.
 - **Do:** read it. Cut it into **3-6 concepts** that build on each other, basic to advanced. One concept = one idea a viewer can watch in 10-15 s. For each: one-line claim, the facts with citations, what moves.
+  - Content from a URL or paste: save a copy under `assets/explainers/sources/` and cite its line numbers.
+  - **Verify every citation by printing it** (`sed -n '120,128p' file`) before checkpoint 1. Line numbers written from memory are often wrong.
 - **Out:** the concept list in `assets/explainers/STORYBOARD.md`.
 - **Reference:** `references/storyboard.md` (concept extraction).
 
 **Checkpoint 1.** Show the concept list and its facts. Wait for the user's OK or corrections.
+
+At every checkpoint, record what the user changed in a `## Changes` list at the end of `STORYBOARD.md` (checkpoint, what changed, why).
 
 ## Phase 2: Storyboard
 
@@ -91,14 +97,16 @@ Missing `python3` → stop and tell the user. Missing node, ffmpeg or Chrome →
 
 **Checkpoint 2.** Show the storyboard. Wait for the OK. Fixing a wrong invariant here costs minutes; fixing it after rendering costs hours.
 
+A new fact, a contradiction in the source, or a changed invariant found later (often by the simulation's asserts) re-opens checkpoint 2 for that concept: update `STORYBOARD.md`, show the change, wait for the OK.
+
 ## Phase 3: Build the SVGs
 
 - **In:** approved storyboard.
 - **Do:**
   1. Copy the engine: `mkdir -p assets/explainers/gen && cp $SKILL/scripts/kfu.py $SKILL/scripts/frames.py $SKILL/assets/base.tpl.svg assets/explainers/gen/`.
-  2. Per concept write `<slug>.tpl.svg` (static layout, from `base.tpl.svg`) and `gen_<slug>.py`: simulation → `kfu.kf()` keyframes, invariants as `assert`s, then `kfu.render("<slug>.tpl.svg", "../<name>-<slug>.svg", still=<t>)`. Set the shared legend once with `kfu.LEGEND = kfu.legend([...])`. Worker/connection pools: `kfu.Pool` (spawn on demand, LIFO reuse, retire). Event order: `heapq`.
+  2. Per concept write `<slug>.tpl.svg` (static layout, from `base.tpl.svg`) and `gen_<slug>.py`: simulation → `kfu` keyframes, invariants as `assert`s, then `kfu.render("<slug>.tpl.svg", "../<name>-<slug>.svg", still=<t>)`. Helpers for pools, timers, changing labels and simulated element counts are listed in `references/svg-rules.md`. Simulation code shared by several concepts goes in its own module in `gen/` (e.g. `gen/sim.py`).
   3. Build: `cd assets/explainers/gen && for g in gen_*.py; do python3 "$g" || exit 1; done`.
-  4. **Look at the frames.** `python3 frames.py ../<name>-<slug>.svg` writes paused-frame contact sheets (light and dark, plus a seam frame to compare with t=0) and prints their paths; `--at 2,5.5` for chosen moments. Open the PNGs and check each frame against the timeline and the invariants. A green build proves nothing about what the viewer sees.
+  4. **Look at the frames.** `python3 frames.py ../<name>-<slug>.svg` writes paused-frame contact sheets (light and dark, plus a seam frame to compare with t=0) and prints their paths; `--at 2,5.5` for chosen moments. They land in `assets/explainers/frames/`. Open the PNGs and check each frame against the timeline and the invariants. Then check text size on 2-3 frames at full size: `--at <t1>,<t2> --width 960 --cols 1`. A green build proves nothing about what the viewer sees.
 - **Out:** `assets/explainers/<name>-<slug>.svg` per concept, plus contact sheets.
 - **Reference:** `references/svg-rules.md` (rendering rules, layout, contrast, legend).
 
@@ -126,6 +134,7 @@ Then:
 ## Phase 5: Package
 
 - Add rebuild commands where the project keeps them (Makefile target, npm script, or a short `assets/explainers/README.md`).
+- Add to `.gitignore`: `assets/explainers/frames/`, `assets/explainers/reel/node_modules/`, `assets/explainers/reel/still-*.png`. Ask whether `reel.mp4`, `reel.srt` and `cover.png` should be committed or ignored (videos are large).
 - Give the user the README embed per SVG: `![<concept>](assets/explainers/<name>-<slug>.svg)`.
 - List every output path. Say which checks you ran by looking (contact sheets, stills) and which you did not.
 

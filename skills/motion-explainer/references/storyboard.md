@@ -4,7 +4,9 @@ Load in phases 1 and 2. Output: `assets/explainers/STORYBOARD.md`, one section p
 
 ## Phase 1: cut the content into concepts
 
-**Read, in this order:** README / intro → the main usage example → the code path that example runs (or the article's core section) → tests (they state the edge cases as facts).
+**Read, in this order:**
+- code: README / intro → the main usage example → the code path that example runs → tests (they state the edge cases as facts);
+- specs, papers, articles: abstract / table of contents → the core sections → figures and worked examples → edge cases, errata, "note that" paragraphs.
 
 **Pick 3-6 concepts.**
 - One concept = one question a viewer can answer after watching it for 10-15 s ("what happens when I call `Add` six times?").
@@ -13,8 +15,12 @@ Load in phases 1 and 2. Output: `assets/explainers/STORYBOARD.md`, one section p
 - Skip what doesn't move (option lists, config tables, type signatures). Mention it in the video as a `points` scene if it matters.
 
 **Write facts, not impressions.** Every fact carries a citation:
-- code: `path/file.go:123` (open the file and check the line; don't cite from memory);
-- docs, articles, specs: a short quote plus where it is (`README.md "Priority Queue"`, `RFC 9293 §3.5`).
+- code: `path/file.go:123`;
+- docs, articles, specs: section, line numbers in your saved copy, and a short quote (`RFC 9293 §3.5, sources/rfc9293.txt:1402 "…"`).
+
+Print every cited range before checkpoint 1 and check it says what you claim. Citations written from memory are often off by a few lines.
+
+**Cite the code that actually runs.** If the readable source can be replaced at runtime (a C accelerator, a native module, a platform-specific backend), say which one runs, cite that if you can read it, and otherwise mark "the other implementation behaves the same" as **(inferred)**. Checking behaviour against the real thing (calling it from the generator and asserting) beats any citation.
 
 Mark anything you inferred rather than read as **(inferred)**. At checkpoint 1, ask the user to confirm or correct every inferred fact before anything is drawn.
 
@@ -32,7 +38,7 @@ Moves: queue fills, 4 workers become busy, 2 jobs wait, workers retire as it dra
 
 ## Phase 2: one storyboard per concept
 
-Fill in every field. An empty field is a question for the user, not a default.
+Fill in every field. An empty field is a question for the user, not a default. A field that truly doesn't apply says `none` and why (`Why-labels: none: nothing is ever refused here`).
 
 ```markdown
 ## <n>. <title>  (`<name>-<slug>.svg`)
@@ -57,6 +63,8 @@ Rules:
 - **Invariants** are behaviour rules with citations, not layout notes. Aim for 3-6 per concept.
 - The **start state** is the honest idle state of the real system (usually empty). Never pre-fill it to make frame 0 look busy.
 - The **still frame** is the moment that explains the most at a glance.
+- **Loop length** follows the honest behaviour, not the 10-15 s scene target. Filling a cache from empty may need 20 s; that's fine. The video shows a window of it (see `offset` in `references/reel.md`).
+- **As built.** After phase 3, add the derived `D` and still time per concept to the storyboard (an "As built" table). Planned and derived times often differ; that needs no new approval unless the behaviour changed (then checkpoint 2 re-opens).
 
 ## Worked example: varmq (Go job queue)
 

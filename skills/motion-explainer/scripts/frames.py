@@ -2,7 +2,8 @@
 
     python3 frames.py diagram.svg [--at 0,2.5,6] [--n 11] [--cols 3] [--width 480] [--out DIR]
 
-Writes <out>/<stem>-light.png and <stem>-dark.png and prints their paths. Default: n evenly spaced frames over
+Writes <out>/<stem>-light.png and <stem>-dark.png (default <out>: frames/ next to the SVG; keep it out of git)
+and prints their paths. Default: n evenly spaced frames over
 the loop plus a "seam" frame just before the end (compare it with t=0). Chrome: $CHROME, else found on PATH.
 """
 import argparse
@@ -67,7 +68,7 @@ def main():
     ap.add_argument("--n", type=int, default=11, help="evenly spaced frames when --at is not given")
     ap.add_argument("--cols", type=int, default=3)
     ap.add_argument("--width", type=int, default=480, help="px per frame")
-    ap.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "motion-explainer-frames"))
+    ap.add_argument("--out", help="folder for the PNGs (default: frames/ next to the SVG)")
     a = ap.parse_args()
 
     svg = Path(a.svg).read_text()
@@ -83,6 +84,7 @@ def main():
         labels = [f"t={t:g}s" for t in times[:-1]] + [f"t={times[-1]:g}s (seam, ~t=0)"]
 
     exe = chrome()
+    a.out = a.out or str(Path(a.svg).resolve().parent / "frames")
     os.makedirs(a.out, exist_ok=True)
     stem = Path(a.svg).name.removesuffix(".svg")
     for theme in ("light", "dark"):

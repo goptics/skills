@@ -73,7 +73,11 @@ for (const size of sizes) {
   await page.goto(url("index.html", size, true));
   await page.evaluate(() => window.ready);
   const stage = page.locator("#stage");
-  const shot = async t => { await page.evaluate(t => seek(t), t); return stage.screenshot({ type: "png", animations: "allow" }); };
+  // after a seek, wait two frames so the diagram iframes repaint (otherwise a jump can capture the previous frame)
+  const shot = async t => {
+    await page.evaluate(t => { seek(t); return new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(ok))); }, t);
+    return stage.screenshot({ type: "png", animations: "allow" });
+  };
 
   if (AT) {
     for (const t of AT.split(",").map(Number)) {

@@ -141,15 +141,16 @@ async function build() {
     const len = s.end - s.start, fr = .35 / len, enter = s.start ? { opacity: 0, transform: "translateY(24px)" } : { opacity: 1, transform: "none" };
     at(el, [enter, { opacity: 1, transform: "none", offset: fr },
             { opacity: 1, transform: "none", offset: 1 - fr }, { opacity: 0, transform: "translateY(-24px)" }], s.start, len, "linear");
-    if (s.type !== "outro") {
+    if (s.type !== "outro") {   // entrances; the first scene skips them so frame 0 is already complete
+      const enterAt = s.start ? 0 : -9;
       el.querySelectorAll(".ln").forEach((ln, i) =>
-        at(ln, [{ opacity: 0, transform: "translateX(-16px)" }, { opacity: 1, transform: "none" }], s.start + .3 + i * .12, .35));
+        at(ln, [{ opacity: 0, transform: "translateX(-16px)" }, { opacity: 1, transform: "none" }], s.start + enterAt + .3 + i * .12, .35));
       const line = getComputedStyle(document.documentElement).getPropertyValue("--mark-line").trim();
       el.querySelectorAll("mark").forEach(mk =>
         at(mk, [{ outlineColor: "transparent" }, { outlineColor: line }, { outlineColor: "transparent" }], s.start + 1.6, 1.4));
       const d = el.querySelector(".diagram"), c = el.querySelector(".cap");
-      if (d) at(d, [{ opacity: 0 }, { opacity: 1 }], s.start + .6, .5);
-      if (c) at(c, [{ opacity: 0, transform: "translateY(16px)" }, { opacity: 1, transform: "none" }], s.start + 1.2, .5);
+      if (d) at(d, [{ opacity: 0 }, { opacity: 1 }], s.start + enterAt + .6, .5);
+      if (c) at(c, [{ opacity: 0, transform: "translateY(16px)" }, { opacity: 1, transform: "none" }], s.start + enterAt + 1.2, .5);
     }
   }
   at(document.getElementById("progress"), [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], 0, t, "linear");

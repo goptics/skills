@@ -5,8 +5,9 @@ Event queues for simulations: use `heapq` directly (see the worked example in re
 """
 
 D = 16.0
-rules = []  # (id, keyframes css)
+rules = []  # (id, [(t seconds, {prop: value})]); turned into % of D at render time, so D may be set last
 LEGEND = ""  # filled into <!--LEGEND-->; set once, e.g. kfu.LEGEND = kfu.legend([...])
+elements = []  # extra SVG markup filled into <!--ELEMENTS-->, for elements whose count the simulation decides
 
 
 def pct(t):
@@ -14,16 +15,19 @@ def pct(t):
 
 
 def kf(name, pts):
-    pts = sorted(pts, key=lambda p: p[0])
-    for (a, _), (b, _) in zip(pts, pts[1:]):
-        assert a <= b, (name, a, b)
+    """Keyframes for element #name, in seconds. Converted with the final kfu.D when rendered."""
+    rules.append((name, sorted(pts, key=lambda p: p[0])))
+
+
+def css(name, pts):
+    """@keyframes text for one rule: pads 0% and 100% with the first and last values."""
     if pts[0][0] > 0:
         pts = [(0, pts[0][1])] + pts
     if pts[-1][0] < D:
         pts = pts + [(D, pts[-1][1])]
-    assert pts[-1][0] <= D, (name, pts[-1][0])
+    assert pts[-1][0] <= D, f"{name}: keyframe at {pts[-1][0]}s is past the loop end D={D}s"
     body = " ".join(f"{pct(t)} {{ " + " ".join(f"{k}: {v};" for k, v in p.items()) + " }" for t, p in pts)
-    rules.append((name, f"    @keyframes {name} {{ {body} }}"))
+    return f"    @keyframes {name} {{ {body} }}"
 
 
 def merge(spans, pad=0):
@@ -92,12 +96,38 @@ def ring(name, times, gap=.6):
 
 
 def bar(name, spans):
-    """Progress bar that fills over each (start, end) span, then fades and resets."""
+    """Progress bar / timer that fills over each (start, end) span, then fades and resets.
+
+    A span may be (start, end, fill): stops at that fraction (a timer cancelled early). A span that starts
+    before the previous one has faded restarts the bar from 0 right away (a timer restarted)."""
     pts = [(0, {"opacity": 1, "transform": "scaleX(0)"})]
-    for s, e in spans:
-        pts += [(s, {"opacity": 1, "transform": "scaleX(0)"}), (e, {"opacity": 1, "transform": "scaleX(1)"}),
-                (e + .3, {"opacity": 0, "transform": "scaleX(1)"}), (e + .31, {"opacity": 1, "transform": "scaleX(0)"})]
+    spans = [(sp[0], sp[1], sp[2] if len(sp) > 2 else 1) for sp in sorted(spans)]
+    for i, (s, e, f) in enumerate(spans):
+        nxt = spans[i + 1][0] if i + 1 < len(spans) else None
+        pts += [(s, {"opacity": 1, "transform": "scaleX(0)"}), (e, {"opacity": 1, "transform": f"scaleX({f:g})"})]
+        if nxt is None or nxt >= e + .31:
+            pts += [(e + .3, {"opacity": 0, "transform": f"scaleX({f:g})"}), (e + .31, {"opacity": 1, "transform": "scaleX(0)"})]
+        else:
+            assert nxt >= e, (name, "spans overlap", e, nxt)
+            spans[i + 1] = (max(nxt, e + .01), *spans[i + 1][1:])   # instant reset, then refill
     kf(name, pts)
+
+
+def states(prefix, changes, n, fade=.08):
+    """Text or shapes that change with state. SVG text can't change via CSS, so draw one element per state
+    (ids prefix0 .. prefix{n-1}, all class="a") and show one at a time. changes: [(t, state index)], from t=0."""
+    changes = sorted(changes)
+    assert changes and changes[0][0] == 0, (prefix, "state at t=0 is required")
+    for k in range(n):
+        pts, cur = [], None
+        for t, i in changes:
+            on = 1 if i == k else 0
+            if cur is None:
+                pts.append((0, {"opacity": on}))
+            elif on != cur:
+                pts += [(t, {"opacity": cur}), (t + fade, {"opacity": on})]
+            cur = on
+        kf(f"{prefix}{k}", pts)
 
 
 class Pool:
@@ -159,23 +189,30 @@ def legend(items, x=110, y=88, dy=20):
 
 
 def fill(s, still, legend=None):
-    """Fill the template placeholders: {D} loop seconds, {STILL} reduced-motion frame, <!--LEGEND-->."""
+    """Fill the template placeholders: {D} loop seconds, {STILL} reduced-motion frame, <!--LEGEND-->, <!--ELEMENTS-->."""
     lg = LEGEND if legend is None else legend
-    return s.replace("{D}", f"{D:g}").replace("{STILL}", f"{still:g}").replace("<!--LEGEND-->", lg.strip())
+    s = s.replace("{D}", f"{D:g}").replace("{STILL}", f"{still:g}").replace("<!--LEGEND-->", lg.strip())
+    return s.replace("<!--ELEMENTS-->", "\n".join(elements)) if elements else s
 
 
-def render(tpl_path, out_path, still, legend=None):
-    """Write the SVG: template + one animation-name rule and one @keyframes per kf() call."""
-    css = "\n".join(f"    #{n} {{ animation-name: {n}; }}" for n, _ in rules)
-    frames = "\n".join(r for _, r in rules)
-    s = fill(open(tpl_path).read(), still, legend).replace("/*KEYFRAMES*/", (css + "\n" + frames).strip())
+def render(tpl, out_path, still, legend=None):
+    """Write the SVG: template + one animation-name rule and one @keyframes per kf() call.
+
+    tpl is a template path, or the template text itself (starts with "<svg"), so several diagrams can share
+    one template and str.replace() their differences in the generator."""
+    names = "\n".join(f"    #{n} {{ animation-name: {n}; }}" for n, _ in rules)
+    frames = "\n".join(css(n, pts) for n, pts in rules)
+    text = tpl if tpl.lstrip().startswith("<svg") else open(tpl).read()
+    s = fill(text, still, legend).replace("/*KEYFRAMES*/", (names + "\n" + frames).strip())
     open(out_path, "w").write(s)
 
 
 if __name__ == "__main__":  # self-check
     assert pct(4) == "25%" and pct(1) == "6.25%"
     kf("x", [(4, {"opacity": 1})])
-    assert rules[-1][1] == "    @keyframes x { 0% { opacity: 1; } 25% { opacity: 1; } 100% { opacity: 1; } }", rules[-1]
+    D = 32.0                             # D set after kf(): still converted with the final value
+    assert css(*rules[-1]) == "    @keyframes x { 0% { opacity: 1; } 12.5% { opacity: 1; } 100% { opacity: 1; } }", css(*rules[-1])
+    D = 16.0
     assert merge([(0, 1), (1.2, 2), (5, 6)], pad=.3) == [(0, 2), (5, 6)]
     p = Path(0, 0, 0, 10).to(10, 0, op=1).to(10, 5)
     assert p.t == 1.5 and p.pts[-1] == (1.5, {"opacity": 1, "transform": "translate(10px, 5px)"})
@@ -196,6 +233,17 @@ if __name__ == "__main__":  # self-check
         raise SystemExit("take on a full pool must fail")
     except AssertionError:
         pass
+
+    rules.clear()
+    bar("t", [(1, 3), (3.1, 5, .5)])           # restarted at 3.1 before the fade, then cancelled at half
+    out = css(*rules[-1])
+    assert "18.75% { opacity: 1; transform: scaleX(1); } 19.38% { opacity: 1; transform: scaleX(0); }" in out, out  # no fade
+    assert "31.25% { opacity: 1; transform: scaleX(0.5); }" in out, out
+    states("st", [(0, 0), (2, 1), (5, 0)], 2)
+    assert css(*rules[-2]) == "    @keyframes st0 { 0% { opacity: 1; } 12.5% { opacity: 1; } 13% { opacity: 0; } 31.25% { opacity: 0; } 31.75% { opacity: 1; } 100% { opacity: 1; } }", css(*rules[-2])
+    elements.append('<circle id="seg0" class="a dot" r="6"/>')
+    assert fill("<svg><!--ELEMENTS--></svg>", 1) == '<svg><circle id="seg0" class="a dot" r="6"/></svg>'
+    elements.clear()
 
     print(legend([("box", 'class="item"', "waiting"), ("dot", "var(--job)", "moving")]))
     print("kfu self-check ok")
