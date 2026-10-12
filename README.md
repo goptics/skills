@@ -23,5 +23,6 @@ The CLI clones this small pack (not each product repo) and copies `skills/<name>
 | Skill | Product |
 |---|---|
 | `vizb` | [vizb](https://vizb.goptics.org) — CSV, JSON, and benchmark HTML charts. Docs: [AI agents](https://vizb.goptics.org/getting-started/ai-agents/). |
+| `motion-explainer` | Not a goptics product: animated SVG explainers + reels from any library, codebase, or concept. Needs python3; video also needs node, ffmpeg, Chrome. |
 
 Skill install is not binary install. If `vizb` is missing, the skill runs the [vizb install](https://vizb.goptics.org/getting-started/install) one-liners.
