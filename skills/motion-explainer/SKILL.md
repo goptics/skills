@@ -96,9 +96,9 @@ Missing `python3` → stop and tell the user. Missing node, ffmpeg or Chrome →
 - **In:** approved storyboard.
 - **Do:**
   1. Copy the engine: `mkdir -p assets/explainers/gen && cp $SKILL/scripts/kfu.py $SKILL/scripts/frames.py $SKILL/assets/base.tpl.svg assets/explainers/gen/`.
-  2. Per concept write `<slug>.tpl.svg` (static layout, from `base.tpl.svg`) and `gen_<slug>.py` (simulation → keyframes, with the invariants as `assert`s).
+  2. Per concept write `<slug>.tpl.svg` (static layout, from `base.tpl.svg`) and `gen_<slug>.py`: simulation → `kfu.kf()` keyframes, invariants as `assert`s, then `kfu.render("<slug>.tpl.svg", "../<name>-<slug>.svg", still=<t>)`. Set the shared legend once with `kfu.LEGEND = kfu.legend([...])`. Worker/connection pools: `kfu.Pool` (spawn on demand, LIFO reuse, retire). Event order: `heapq`.
   3. Build: `cd assets/explainers/gen && for g in gen_*.py; do python3 "$g" || exit 1; done`.
-  4. **Look at the frames.** `python3 frames.py ../<name>-<slug>.svg` writes a paused-frame contact sheet, light and dark. Open the PNGs and check each frame against the timeline and the invariants. A green build proves nothing about what the viewer sees.
+  4. **Look at the frames.** `python3 frames.py ../<name>-<slug>.svg` writes paused-frame contact sheets (light and dark, plus a seam frame to compare with t=0) and prints their paths; `--at 2,5.5` for chosen moments. Open the PNGs and check each frame against the timeline and the invariants. A green build proves nothing about what the viewer sees.
 - **Out:** `assets/explainers/<name>-<slug>.svg` per concept, plus contact sheets.
 - **Reference:** `references/svg-rules.md` (rendering rules, layout, contrast, legend).
 
