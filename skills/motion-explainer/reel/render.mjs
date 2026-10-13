@@ -4,6 +4,8 @@
 //        node render.mjs --at 6,20,35     stills only, for checking
 //        node render.mjs --cover          cover PNG from cover.html
 //        node render.mjs --serve          live presenter mode: open the printed URL and screen-record
+//        node render.mjs --script         SCRIPT.md (voice-over table) from each scene's "say"; no browser
+//        node render.mjs --check          validate scenes.json only
 //        --fps 30
 // Outputs land next to this file: reel.mp4 / reel.srt / cover.png / still-<t>.png, or with a -9x16 style suffix
 // when several sizes are rendered. Chrome: $CHROME, else installed Google Chrome, else chromium on PATH.
@@ -14,16 +16,27 @@ import { spawn } from "node:child_process";
 import { delimiter, extname, join, normalize, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
-import { LAYOUTS, pickSize, srt, timeline } from "./core.mjs";
+import { LAYOUTS, pickSize, scriptMarkdown, srt, timeline, validate } from "./core.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(name); return i < 0 ? def : args.splice(i, 2)[1]; };
 const FPS = Number(opt("--fps", 30));
 const AT = opt("--at", null), SIZE = opt("--size", null);
-const SERVE = args.includes("--serve"), COVER = args.includes("--cover");
+const SERVE = args.includes("--serve"), COVER = args.includes("--cover"), SCRIPT = args.includes("--script"), CHECK = args.includes("--check");
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const R = JSON.parse(await readFile(join(HERE, "scenes.json"), "utf8"));
+const problems = validate(R);
+if (problems.length) {
+  console.error(`scenes.json:\n  ${problems.join("\n  ")}`);
+  process.exit(1);
+}
+if (CHECK) { console.log("scenes.json ok"); process.exit(0); }
+if (SCRIPT) {
+  await writeFile(join(HERE, "SCRIPT.md"), scriptMarkdown(R));
+  console.log(`wrote ${join(HERE, "SCRIPT.md")}`);
+  process.exit(0);
+}
 const sizes = (SIZE ? [SIZE] : R.sizes ?? [R.size ?? "9:16"]).map(s => pickSize(R, s));
 const name = (base, ext, size) => join(HERE, `${base}${sizes.length > 1 ? `-${size.replace(":", "x")}` : ""}${ext}`);
 

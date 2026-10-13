@@ -56,6 +56,8 @@ import { LAYOUTS, pickSize, timeline, viewBox, highlight } from "./core.mjs";
 //               diagram (path from this folder), offset (s into the diagram's loop at scene start), caption (HTML) },
 //             { duration, type: "outro", logo, code (shell by default), lines: [HTML] } ],
 //   cover: see cover.html }
+// v2, all optional (validated by core.mjs validate()): scene say (voice-over words → SCRIPT.md, TTS, slide notes),
+//   steps [diagram-loop seconds where slides pause], slide { overrides for the slide version }, top-level audio { voice, music }.
 // Languages: go, js/ts, python, rust, sh; anything else renders as plain text. Needs http (render.mjs serves it).
 const params = new URLSearchParams(location.search);
 const stage = document.getElementById("stage");

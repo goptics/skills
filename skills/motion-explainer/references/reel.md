@@ -91,32 +91,28 @@ The cover is the thumbnail and the grid tile, so design it to be read at ~270 px
 - In 9:16, everything stays inside the 1080×1350 middle band; the engine places it there.
 - Render it with `node render.mjs --cover`, then look at it scaled down to thumbnail size.
 
-## Voice-over script (`SCRIPT.md`)
+## Voice-over text (`say`) and `SCRIPT.md`
 
-The video is silent. `SCRIPT.md` gives the presenter the words and the times. Times come from the scene durations.
+Each scene's `say` holds its voice-over words. It is the single source: `node render.mjs --script` writes `SCRIPT.md` (a table of time window, scene and words for the presenter), and later steps use it for text-to-speech and slide notes. Edit `scenes.json`, never `SCRIPT.md`.
+
+```json
+{ "duration": 13, "title": "Basic usage", "say": "VarMQ, in sixty seconds. Create a worker with your job function and bind a queue. …", … }
+```
+
+`SCRIPT.md` comes out as:
 
 ```markdown
-# <Name> reel: voice-over script (60s)
-
-Timings match `scenes.json`. About 2.5 words per second keeps the pace natural.
-
 | Time | Scene | Say |
 |---|---|---|
 | 0:00–0:13 | 1 · Basic usage | "VarMQ, in sixty seconds. Create a worker with your job function and bind a queue. …" |
-| 0:13–0:28 | 2 · Concurrency | "Pass a concurrency, say four. That's a limit, not a pool size: …" |
 | 0:56–1:00 | Outro | "go get github.com/goptics/varmq, and drop a star if it helps." |
-
-## Make the video
-
-    cd assets/explainers/reel && npm install && node render.mjs
-
-Writes `reel.mp4` (silent) and `reel.srt` (captions). Add a voice or face-cam on top in any editor.
-Cover: `node render.mjs --cover`. Live presenter mode to screen-record while talking: `node render.mjs --serve`
-(←/→ jumps scenes, space pauses).
 ```
 
-- The script says the same thing as the caption, in more words. Every fact in it comes from the storyboard; nothing new is claimed only in the voice-over.
-- Read it aloud against the live mode (`--serve`) once. If a line doesn't fit its scene, shorten the line or lengthen the scene, then re-render.
+- `say` says the same thing as the caption, in more words. Every fact in it comes from the storyboard; nothing new is claimed only in the voice-over.
+- Read it aloud against the live mode (`node render.mjs --serve`; ←/→ jumps scenes, space pauses) once. If a line doesn't fit its scene, shorten the line or lengthen the scene, then re-render.
+- `node render.mjs --check` validates `scenes.json` (unknown keys, bad durations, malformed `steps`) without opening a browser.
+
+Other optional scene fields, used by the voice-over and slides modes: `steps` (diagram-loop seconds where a slide pauses), `slide` (overrides for the slide version: title, points, code, caption, notes) and, top level, `audio` (voice provider and music).
 
 ## Check before handing over
 
