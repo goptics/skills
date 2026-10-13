@@ -207,9 +207,12 @@ def render(tpl, out_path, still, legend=None, motion=True):
     tpl is a template path, or the template text itself (starts with "<svg"), so several diagrams can share
     one template and str.replace() their differences in the generator. motion=True also writes
     <out>.motion.json next to it (see motion_json), for renderers that drive the frames themselves (Remotion)."""
+    text = fill(tpl if tpl.lstrip().startswith("<svg") else open(tpl).read(), still, legend)
+    ids = set(__import__("re").findall(r'\bid="([^"]+)"', text))
+    missing = [n for n, _ in rules if n not in ids]
+    assert not missing, f"kf() names with no element id in the template: {missing} (ids must match exactly, e.g. wr0..wr3)"
     names = "\n".join(f"    #{n} {{ animation-name: {n}; }}" for n, _ in rules)
     frames = "\n".join(css(n, pts) for n, pts in rules)
-    text = fill(tpl if tpl.lstrip().startswith("<svg") else open(tpl).read(), still, legend)
     open(out_path, "w").write(text.replace("/*KEYFRAMES*/", (names + "\n" + frames).strip()))
     if motion:
         write_motion(out_path)

@@ -24,7 +24,7 @@ cd assets/explainers/reel && node render.mjs --renderer remotion
 
 Set `"renderer": "remotion"` in `scenes.json` to make it the default. The system Chrome is used when found ($CHROME, /usr/bin/google-chrome, macOS Chrome); otherwise Remotion downloads its own headless browser.
 
-Versions are pinned (Remotion 4.0.529, React 19.3.0, Vite 8.3.1). For upgrades and general Remotion work, Remotion's own agent skills help: `npx skills add remotion-dev/skills`.
+Versions are pinned (Remotion 4.0.529, React 19.3.0, Vite 8.3.1). Harmless noise: npm may skip esbuild's postinstall script, and the deck build warns about "use client" and chunk sizes. For upgrades and general Remotion work, Remotion's own agent skills help: `npx skills add remotion-dev/skills`.
 
 ## How diagrams stay true
 

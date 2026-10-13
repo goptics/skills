@@ -87,7 +87,8 @@ function Deck() {
     <>
       <Player ref={player} component={Reel} inputProps={props} durationInFrames={Math.max(1, F(total))} fps={fps}
         compositionWidth={W} compositionHeight={H} style={{ width: W * z, height: H * z, margin: "0 auto", top: (box.h - H * z) / 2 }}
-        controls={false} clickToPlay={false} doubleClickToFullscreen={false} spaceKeyToPlayOrPause={false} acknowledgeRemotionLicense />
+        controls={false} clickToPlay={false} doubleClickToFullscreen={false} spaceKeyToPlayOrPause={false} acknowledgeRemotionLicense
+        numberOfSharedAudioTags={0} initiallyMuted />   {/* no audio in the deck: lets the first slide play without a click */}
       <div id="hud">{`${i + 1} / ${scenes.length}${st.length ? `  ·  step ${Math.min(k + 1, st.length)} / ${st.length}${k === st.length ? " (looping)" : ""}` : ""}${paused ? "  ·  paused" : ""}`}</div>
       {help && <div id="help"><div>→ / Space / PgDn next step · ← / PgUp previous<br />Home / End · 1–9 jump · F fullscreen · S notes · P pause · R restart · ? help</div></div>}
     </>

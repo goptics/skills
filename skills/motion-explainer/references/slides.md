@@ -49,6 +49,8 @@ With the Remotion renderer (see `remotion.md`): `node render.mjs --renderer remo
 
 Both decks need http (a static server), not `file://`, because they load `scenes.json` and modules.
 
+For automated checks, both decks expose `window.deck`: `state()` returns the slide `i`, pause point `k`, step count, the diagram time `t` (built-in) or the player `frame` (Remotion), and whether it is still moving; `next()`, `prev()`, `enter(n)` drive it. Drive it with real key presses in a headless browser and compare the held time or frame with the step (Remotion: `round((scene start + step - offset) × fps)`).
+
 ## Choosing pause points
 
 - Pick the moments the storyboard calls out: the state change the slide is about (all slots busy, the reorder, the dropped signal). 2-4 per slide.

@@ -9,6 +9,7 @@
 //        node render.mjs --slides --export <dir>   static copy of the deck to host anywhere
 //        node render.mjs --script         SCRIPT.md (voice-over table) from each scene's "say"; no browser
 //        node render.mjs --check          validate scenes.json only
+//        node render.mjs --timeline       scene windows (voice-fitted when audio is set), loop-wrap warnings
 //        --fps 30   --renderer builtin|remotion (default: scenes.json "renderer", else builtin)   --no-voice
 // Outputs land next to this file: reel.mp4 / reel.srt / cover.png / still-<t>.png, or with a -9x16 style suffix
 // when several sizes are rendered. Chrome: $CHROME, else installed Google Chrome, else chromium on PATH.
@@ -52,6 +53,21 @@ const T = audio?.R ?? R;
 if (flag("--slides") && EXPORT) {
   console.log(`wrote ${await renderer.exportSlides({ R: T, dir: HERE, size: SIZE ?? T.slides?.size ?? "16:9", out: EXPORT })}`);
   await renderer.close();
+  process.exit(0);
+}
+if (flag("--timeline")) {
+  const { scenes, total } = timeline(T);
+  for (const [i, s] of scenes.entries()) {
+    let note = "";
+    if (s.diagram) {
+      const svg = await readFile(join(HERE, s.diagram), "utf8").catch(() => "");
+      const D = Number(svg.match(/--dur:\s*([\d.]+)s/)?.[1]);
+      const end = (s.offset ?? 0) + s.duration;
+      note = D ? ` diagram ${(s.offset ?? 0)}–${end.toFixed(2)}s of a ${D}s loop${end > D ? "  ⚠ wraps to the loop start inside the scene" : ""}` : "";
+    }
+    console.log(`${String(i + 1).padStart(2)}  ${s.start.toFixed(2).padStart(6)}–${s.end.toFixed(2).padEnd(6)} ${(s.type === "outro" ? "Outro" : s.title ?? "").padEnd(24)}${note}`);
+  }
+  console.log(`total ${total.toFixed(2)}s${audio ? " (fitted to the voice)" : ""}`);
   process.exit(0);
 }
 if (flag("--serve") || flag("--slides")) {

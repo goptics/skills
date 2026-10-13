@@ -121,7 +121,7 @@ Other optional fields: `steps` and `slide` for the deck (`references/slides.md`)
    - no text in the safe zones; nothing cut off; the body isn't shrunk to unreadable;
    - the diagram shows the moment the caption describes.
 2. `ffprobe -v error -show_entries stream=width,height,r_frame_rate:format=duration -of csv=p=0 reel.mp4`: expected size, 30 fps, and the summed duration.
-3. Captions: `reel.srt` has one cue per captioned scene.
+3. Captions: `reel.srt` has one cue per captioned scene (silent reel), or several cues per scene with the spoken words (voiced reel), each inside its scene's window.
 4. Cover checked at thumbnail size.
 
 Rendering takes a few minutes per size (one screenshot per frame). Run it in the background, and render stills while you iterate. Stills (`still-*.png`) land in `reel/`; delete them or keep them gitignored.

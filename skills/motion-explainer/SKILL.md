@@ -93,7 +93,7 @@ Missing `python3` → stop and tell the user. Missing node, ffmpeg or Chrome →
 
 **Checkpoint 1.** Show the concept list and its facts. Wait for the user's OK or corrections.
 
-At every checkpoint, record what the user changed in a `## Changes` list at the end of `STORYBOARD.md` (checkpoint, what changed, why).
+At every checkpoint, record what the user changed in a `## Changes` list, kept as the last section of `STORYBOARD.md` (checkpoint, what changed, why); add later sections above it.
 
 ## Phase 2: Storyboard
 
@@ -111,7 +111,7 @@ A new fact, a contradiction in the source, or a changed invariant found later (o
 - **In:** approved storyboard.
 - **Do:**
   1. Copy the engine: `mkdir -p assets/explainers/gen && cp $SKILL/scripts/kfu.py $SKILL/scripts/frames.py $SKILL/assets/base.tpl.svg assets/explainers/gen/`.
-  2. Per concept write `<slug>.tpl.svg` (static layout, from `base.tpl.svg`) and `gen_<slug>.py`: simulation → `kfu` keyframes, invariants as `assert`s, then `kfu.render("<slug>.tpl.svg", "../<name>-<slug>.svg", still=<t>)`. Helpers for pools, timers, changing labels and simulated element counts are listed in `references/svg-rules.md`. Simulation code shared by several concepts goes in its own module in `gen/` (e.g. `gen/sim.py`).
+  2. Per concept write `<slug>.tpl.svg` (static layout, from `base.tpl.svg`; concepts sharing one layout may share one template) and `gen_<slug>.py`: simulation → `kfu` keyframes, invariants as `assert`s, then `kfu.render("<slug>.tpl.svg", "../<name>-<slug>.svg", still=<t>)`. Helpers for pools, timers, changing labels and simulated element counts are listed in `references/svg-rules.md`. Simulation code shared by several concepts goes in its own module in `gen/` (e.g. `gen/sim.py`).
   3. Build: `cd assets/explainers/gen && for g in gen_*.py; do python3 "$g" || exit 1; done`.
   4. **Look at the frames.** `python3 frames.py ../<name>-<slug>.svg` writes paused-frame contact sheets (light and dark, plus a seam frame to compare with t=0) and prints their paths; `--at 2,5.5` for chosen moments. They land in `assets/explainers/frames/`. Open the PNGs and check each frame against the timeline and the invariants. Then check text size on 2-3 frames at full size: `--at <t1>,<t2> --width 960 --cols 1`. A green build proves nothing about what the viewer sees.
 - **Out:** `assets/explainers/<name>-<slug>.svg` per concept, plus contact sheets.
@@ -135,8 +135,8 @@ Then:
   1. Copy the engine: `mkdir -p assets/explainers/reel && for f in index.html cover.html slides.html reel.css cover.css render.mjs core.mjs scene-dom.mjs motion.mjs audio.mjs package.json voice renderers; do cp -r "$SKILL/reel/$f" assets/explainers/reel/; done && (cd assets/explainers/reel && npm install)`. Remotion: also `cp -r "$SKILL/reel/remotion" assets/explainers/reel/ && (cd assets/explainers/reel/remotion && npm install)`.
   2. Write `scenes.json` (schema at the top of `index.html`): `sizes`; one scene per concept (title, code or points, diagram, loop `offset`, caption, `say`); an outro; a `cover` block; for slides, `steps` and `slide` overrides; `audio` for a voice; `"renderer": "remotion"` if chosen. First scene visible at frame 0, no intro card.
   3. `node render.mjs --check` validates it; `node render.mjs --script` writes `SCRIPT.md` from the `say` lines (~2.5 words/s).
-  4. Check stills at each scene midpoint and ~1 s before each scene ends: `node render.mjs --at <t1>,<t2>,...` (per size; voice-fitted timing). Look at them: safe zones, text size, diagram aligned with the code panel margins.
-  5. Video: `node render.mjs` (MP4 + SRT per size, voice mixed in), then `node render.mjs --cover`. Listen to a voiced reel once, start to end.
+  4. `node render.mjs --timeline` prints each scene's window (voice-fitted) and warns when a diagram would wrap to its loop start inside a scene; fix those first. Then check stills at each scene midpoint and ~1 s before each scene ends: `node render.mjs --at <t1>,<t2>,...` (per size). Look at them: safe zones, text size, diagram aligned with the code panel margins.
+  5. Video: `node render.mjs` (MP4 + SRT per size, voice mixed in), then `node render.mjs --cover`. Check a voiced reel as in `references/audio.md` (ask the user to listen once; you can check timing with `silencedetect`).
   6. Slides: `node render.mjs --slides`, step through every slide with the keyboard; `node render.mjs --slides --export ../slides` for a static copy.
 - **Out:** `reel.mp4`, `reel.srt`, `cover.png`, `SCRIPT.md`; the deck (served or exported).
 - **References:** `references/reel.md` (layout, safe zones, pacing, offsets, cover, `say`); `references/audio.md` (voice providers, timing, music); `references/slides.md` (steps, overrides, keys); `references/remotion.md` (licence, setup, `focus`).

@@ -22,6 +22,8 @@ Print every cited range before checkpoint 1 and check it says what you claim. Ci
 
 **Cite the code that actually runs.** If the readable source can be replaced at runtime (a C accelerator, a native module, a platform-specific backend), say which one runs, cite that if you can read it, and otherwise mark "the other implementation behaves the same" as **(inferred)**. Checking behaviour against the real thing (calling it from the generator and asserting) beats any citation.
 
+To draw the readable version's internals, load it explicitly and compare it with the native one at every step. Python example: `sys.modules["_functools"] = None` before importing the module from `src/` gives the pure-Python code path; then assert that its observable results (return values, `cache_info()`) equal the native version's after every call, and label the diagram "drawn: pure-Python version".
+
 Mark anything you inferred rather than read as **(inferred)**. At checkpoint 1, ask the user to confirm or correct every inferred fact before anything is drawn.
 
 Phase 1 output, per concept:

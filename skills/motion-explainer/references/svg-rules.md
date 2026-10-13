@@ -17,7 +17,7 @@ Load in phase 3. Each rule exists because breaking it broke a real diagram.
 
 | Helper | Use |
 |---|---|
-| `kf(id, [(t, {prop: value})])` | Raw keyframes; pads 0% and 100% with the first and last values |
+| `kf(id, [(t, {prop: value})])` | Raw keyframes; pads 0% and 100% with the first and last values. Values interpolate between every pair of consecutive points: to keep something still, give it the same value at both ends of the pause (a hold point) |
 | `at(t, x, y, opacity, fill=None)` | One point for a moving element |
 | `Path(t, x, y, speed).to(x, y, op=).wait(dt)` | Constant-speed walk along straight segments; `op=0` hides the dot (inside a box) |
 | `flash(id, spans, peak)` | Glow on/off over `(start, end)` spans; overlapping spans merge |
@@ -60,6 +60,7 @@ GitHub shows README SVGs through `<img>`. That sandbox decides most rules.
 - The last frame must equal the first. Check the `seam` frame of the contact sheet against `t=0`.
 - Elements that exist only for part of the loop start and end with `opacity: 0`.
 - Things present from the start (an idle worker, a resident cache entry) must be present at the end too, at the same place.
+- **Same state, different object** (a cache cleared and rebuilt, a new root node): draw it as the same box in the same place, and say in the storyboard that the seam shows an equivalent state, not the same object.
 - **Systems that never return to their start state** (a connection that ends CLOSED, a cache that stays warm): end the run, hold the end state ~1 s, then cross-fade to the start state with a small "↻ replay" label. Assert the behaviour within the run as usual; the seam check then only proves the cross-fade, not a fact about the system. Say so in the storyboard.
 
 ## Layout
