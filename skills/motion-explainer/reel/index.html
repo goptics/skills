@@ -42,11 +42,13 @@
 </head>
 <body>
 <div id="stage"><div id="progress"></div></div>
-<script>
+<script type="module">
+import { LAYOUTS, pickSize, timeline, viewBox, highlight } from "./core.mjs";
+
 // One timeline (seconds), built from scenes.json. Every motion is a Web Animation or a CSS animation inside a
 // diagram, so seek(t) can put the whole reel at any frame: live mode drives it from rAF, render.mjs frame by frame.
 //   ?size=9:16|16:9|1:1  picks the layout (default: scenes.json "size", else 9:16)   ?render  hands control to render.mjs
-// 9:16 keeps text clear of the bottom ~350px and right ~120px, where the platforms draw their UI.
+// Sizes, layouts, highlighter and timeline live in core.mjs (shared with cover.html and render.mjs).
 //
 // scenes.json: { title, size | sizes: ["9:16", "16:9", "1:1"], lang (default code language), packages: [names
 //   coloured as packages before "." or "::"], colors: { accent: "#…", … CSS variables }, root (served folder, default ".."),
@@ -54,12 +56,7 @@
 //               diagram (path from this folder), offset (s into the diagram's loop at scene start), caption (HTML) },
 //             { duration, type: "outro", logo, code (shell by default), lines: [HTML] } ],
 //   cover: see cover.html }
-// Languages: go, js/ts, python, rust, sh; anything else renders as plain text.
-const LAYOUTS = {
-  "9:16": { W: 1080, H: 1920, mode: "stack", pad: 40, head: [60, 110], title: 76, chip: 30, top: 330, code: 30, cap: 52, capInset: [60, 120], safe: 350 },
-  "1:1":  { W: 1080, H: 1080, mode: "stack", pad: 40, head: [60, 56], title: 56, chip: 24, top: 220, code: 24, cap: 38, capInset: [60, 60], safe: 50 },
-  "16:9": { W: 1920, H: 1080, mode: "side", pad: 60, head: [80, 60], title: 68, chip: 26, top: 250, code: 28, cap: 44, capInset: [80, 80], safe: 60, split: 860 },
-};
+// Languages: go, js/ts, python, rust, sh; anything else renders as plain text. Needs http (render.mjs serves it).
 const params = new URLSearchParams(location.search);
 const stage = document.getElementById("stage");
 const anims = [];          // page-level Web Animations, all on the reel timeline (delay = absolute start)
@@ -67,54 +64,18 @@ const frames = [];         // { el, scene } diagram iframes, seeked separately
 const at = (el, keyframes, start, dur, easing = "cubic-bezier(.2, .7, .2, 1)") =>
   anims.push(el.animate(keyframes, { delay: start * 1000, duration: dur * 1000, fill: "both", easing }));
 
-// ---- highlighter: one token regex per language; ⟦…⟧ marks a highlight ----
-const KW = {
-  go: "break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var",
-  js: "async await break case catch class const continue default delete do else export extends false finally for from function if import in instanceof interface let new null of return static super switch this throw true try type typeof undefined var void while yield",
-  py: "and as assert async await break class continue def del elif else except False finally for from global if import in is lambda None nonlocal not or pass raise return True try while with yield",
-  rs: "as async await break const continue crate dyn else enum Err extern false fn for if impl in let loop match mod move mut None Ok pub ref return Self self Some static struct super trait true type unsafe use where while",
-};
-const ALIAS = { golang: "go", ts: "js", typescript: "js", javascript: "js", tsx: "js", jsx: "js", python: "py", rust: "rs", bash: "sh", shell: "sh", zsh: "sh" };
-const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-function tokenizer(lang, pkgs) {
-  const com = lang === "py" ? "#.*" : "\\/\\/.*";
-  const str = lang === "rs" ? '"(?:[^"\\\\]|\\\\.)*"' : lang === "go" ? '"(?:[^"\\\\]|\\\\.)*"|`[^`]*`'
-    : '"(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\'' + (lang === "js" ? "|`[^`]*`" : "");
-  const pkg = pkgs.length ? `\\b(${pkgs.join("|")})\\b(?=\\.|::)` : "(?!)";
-  return new RegExp(`(${com})|(${str})|\\b(${KW[lang].replace(/ /g, "|")})\\b|${pkg}|\\b(\\d[\\d_.]*)\\b|\\b([A-Za-z_]\\w*!?)(?=\\(|!\\()`, "g");
-}
-function highlight(line, lang, pkgs) {
-  lang = ALIAS[lang] ?? lang;
-  let html;
-  if (lang === "sh") {        // command (+ subcommand when there are arguments), strings, comments
-    html = esc(line).replace(/^(\s*)([\w./-]+(?:\s+[a-z][\w-]*(?=\s+\S))?)|("[^"]*"|'[^']*')|(#.*)$/g, (m, sp, cmd, s, c) =>
-      cmd ? `${sp}<span class="fn">${cmd}</span>` : `<span class="${s ? "str" : "com"}">${m}</span>`);
-  } else if (KW[lang]) {
-    html = esc(line).replace(tokenizer(lang, pkgs), (m, com, str, kw, pkg, num, fn) =>
-      `<span class="${com ? "com" : str ? "str" : kw ? "kw" : pkg ? "pkg" : num ? "num" : "fn"}">${m}</span>`);
-  } else html = esc(line);    // unknown language: plain text
-  return html.replace(/⟦/g, "<mark>").replace(/⟧/g, "</mark>");
-}
-
 // ---- build ----
 async function build() {
   const R = await (await fetch("scenes.json")).json();
-  const L = LAYOUTS[params.get("size") ?? R.size ?? "9:16"];
-  if (!L) throw new Error(`unknown size ${params.get("size")}; use one of ${Object.keys(LAYOUTS)}`);
+  const L = LAYOUTS[pickSize(R, params.get("size") ?? undefined)];
   if (R.title) document.title = R.title;
   for (const [k, v] of Object.entries(R.colors ?? {})) document.documentElement.style.setProperty(`--${k}`, v);
   for (const k of ["title", "chip", "code", "cap"]) stage.style.setProperty(`--${k}`, `${L[k]}px`);
   Object.assign(stage.style, { width: `${L.W}px`, height: `${L.H}px` });
   const pkgs = R.packages ?? [];
-  let t = 0;
-  const SCENES = R.scenes.map(s => ({ ...s, start: t, end: (t += s.duration) }));
+  const { scenes: SCENES, total: t } = timeline(R);
   window.SCENES = SCENES; window.TOTAL = t; window.LAYOUT = L;
-
-  const sizeOf = async src => {   // diagram size from its viewBox, so layout is known before the iframe loads
-    const svg = await (await fetch(src)).text();
-    const vb = svg.match(/viewBox="\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)/);
-    return vb ? [+vb[1], +vb[2]] : [960, 420];
-  };
+  const sizeOf = async src => viewBox(await (await fetch(src)).text());
 
   for (const s of SCENES) {
     const el = document.createElement("div");

@@ -14,6 +14,7 @@ import { spawn } from "node:child_process";
 import { delimiter, extname, join, normalize, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
+import { LAYOUTS, pickSize, srt, timeline } from "./core.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(name); return i < 0 ? def : args.splice(i, 2)[1]; };
@@ -23,16 +24,14 @@ const SERVE = args.includes("--serve"), COVER = args.includes("--cover");
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const R = JSON.parse(await readFile(join(HERE, "scenes.json"), "utf8"));
-const DIMS = { "9:16": [1080, 1920], "16:9": [1920, 1080], "1:1": [1080, 1080] };
-const sizes = SIZE ? [SIZE] : R.sizes ?? [R.size ?? "9:16"];
-for (const s of sizes) if (!DIMS[s]) throw new Error(`unknown size ${s}; use one of ${Object.keys(DIMS)}`);
+const sizes = (SIZE ? [SIZE] : R.sizes ?? [R.size ?? "9:16"]).map(s => pickSize(R, s));
 const name = (base, ext, size) => join(HERE, `${base}${sizes.length > 1 ? `-${size.replace(":", "x")}` : ""}${ext}`);
 
 // static server over `root` (scenes.json, default ".." = the folder holding the SVGs) so the page and the diagram
 // iframes share one origin: seek() reaches into the iframes, and relative paths in scenes.json just work
 const ROOT = resolve(HERE, R.root ?? "..");
 const PAGE = "/" + relative(ROOT, HERE).split(sep).filter(Boolean).map(encodeURIComponent).join("/");
-const TYPES = { ".html": "text/html", ".svg": "image/svg+xml", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp" };
+const TYPES = { ".html": "text/html", ".mjs": "text/javascript", ".js": "text/javascript", ".svg": "image/svg+xml", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp" };
 const server = createServer(async (req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url, "http://x").pathname));
   const body = await readFile(join(ROOT, path)).catch(() => null);
@@ -59,7 +58,7 @@ async function launch() {
 
 const browser = await launch();
 for (const size of sizes) {
-  const [W, H] = DIMS[size];
+  const { W, H } = LAYOUTS[size];
   const page = await browser.newPage({ viewport: { width: W, height: H }, colorScheme: "dark" });
   page.on("pageerror", e => { console.error(e); process.exit(1); });
   if (COVER) {
@@ -71,7 +70,8 @@ for (const size of sizes) {
     continue;
   }
   await page.goto(url("index.html", size, true));
-  await page.evaluate(() => window.ready);
+  if (!await page.evaluate(async () => { await window.ready; return typeof window.seek === "function"; }))
+    throw new Error("index.html did not start (check the browser console: a module failed to load?)");
   const stage = page.locator("#stage");
   // after a seek, wait two frames so the diagram iframes repaint (otherwise a jump can capture the previous frame)
   const shot = async t => {
@@ -87,7 +87,7 @@ for (const size of sizes) {
     }
     continue;
   }
-  const total = await page.evaluate(() => TOTAL), out = name("reel", ".mp4", size);
+  const { scenes, total } = timeline(R), out = name("reel", ".mp4", size);
   const ff = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(FPS), "-i", "-",
     "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "slow", "-movflags", "+faststart", out], { stdio: ["pipe", "inherit", "inherit"] });
   const n = Math.round(total * FPS);
@@ -97,11 +97,7 @@ for (const size of sizes) {
   }
   ff.stdin.end();
   await new Promise((ok, fail) => ff.on("close", c => (c ? fail(new Error(`ffmpeg exit ${c}`)) : ok())));
-  // captions: each scene's caption from 1.2s after it starts (when it fades in) to 0.3s before it ends
-  await writeFile(out.replace(/\.mp4$/, ".srt"), await page.evaluate(() => SCENES.filter(s => s.caption).map((s, i) => {
-    const ts = t => new Date(t * 1000).toISOString().slice(11, 23).replace(".", ",");
-    return `${i + 1}\n${ts(s.start + 1.2)} --> ${ts(s.end - .3)}\n${s.caption.replace(/<[^>]+>/g, "")}\n`;
-  }).join("\n")));
+  await writeFile(out.replace(/\.mp4$/, ".srt"), srt(scenes));
   console.log(`\nwrote ${out}`);
   await page.close();
 }

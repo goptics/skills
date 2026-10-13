@@ -24,19 +24,16 @@
 </head>
 <body>
 <div id="stage"><div id="band"><div id="col"></div></div></div>
-<script>
+<script type="module">
+import { COVERS, pickSize, viewBox } from "./core.mjs";
+
 // Cover / thumbnail from scenes.json "cover": { logo, chip, headline (HTML), diagram, still (s), crop [x, y, w, h]
 // in diagram units, foot, hide [CSS selectors inside the diagram] }. ?size=9:16|16:9|1:1 as in index.html.
-// 9:16: everything inside the 1080x1350 middle band (y 285-1635) that profile grids show, clear of the bottom UI.
-const SIZES = {
-  "9:16": { W: 1080, H: 1920, band: [285, 1635], mode: "col", crop: 1040, h1: 128, logo: 380, chip: 34, foot: 40, gap: 52 },
-  "1:1":  { W: 1080, H: 1080, band: [40, 1040], mode: "col", crop: 960, h1: 96, logo: 300, chip: 28, foot: 32, gap: 32 },
-  "16:9": { W: 1920, H: 1080, band: [60, 1020], mode: "side", crop: 960, h1: 120, logo: 380, chip: 32, foot: 36, gap: 40 },
-};
+// Sizes (COVERS) live in core.mjs; 9:16 keeps everything inside the middle band that profile grids show.
 const params = new URLSearchParams(location.search);
 window.ready = (async () => {
   const R = await (await fetch("scenes.json")).json(), C = R.cover ?? {};
-  const S = SIZES[params.get("size") ?? R.size ?? "9:16"];
+  const S = COVERS[pickSize(R, params.get("size") ?? undefined)];
   const stage = document.getElementById("stage"), band = document.getElementById("band"), col = document.getElementById("col");
   for (const [k, v] of Object.entries(R.colors ?? {})) document.documentElement.style.setProperty(`--${k}`, v);
   for (const k of ["h1", "logo", "chip", "foot", "gap"]) stage.style.setProperty(`--${k}`, `${S[k]}px`);
@@ -46,8 +43,7 @@ window.ready = (async () => {
 
   let crop = "";
   if (C.diagram) {
-    const svg = await (await fetch(C.diagram)).text(), vb = svg.match(/viewBox="\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)/);
-    const [w, h] = vb ? [+vb[1], +vb[2]] : [960, 420], [cx, cy, cw, ch] = C.crop ?? [0, 0, w, h], k = S.crop / cw;
+    const [w, h] = viewBox(await (await fetch(C.diagram)).text()), [cx, cy, cw, ch] = C.crop ?? [0, 0, w, h], k = S.crop / cw;
     crop = `<div class="crop" style="width:${S.crop}px;height:${Math.round(ch * k)}px"><iframe src="${C.diagram}" scrolling="no"
       style="width:${w}px;height:${h}px;transform:scale(${+k.toFixed(4)});left:${Math.round(-cx * k)}px;top:${Math.round(-cy * k)}px"></iframe></div>`;
   }
