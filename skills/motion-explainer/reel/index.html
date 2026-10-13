@@ -4,46 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width">
 <title>Explainer reel</title>
-<style>
-  :root {
-    --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3; --muted: #9198a1;
-    --accent: #3fb950; --mark: rgba(210, 153, 34, .28); --mark-line: #d29922;
-    --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e; --num: #79c0ff; --fn: #d2a8ff; --pkg: #ffa657;
-    --sans: system-ui, -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
-    --mono: ui-monospace, "JetBrains Mono", "DejaVu Sans Mono", "Noto Sans Mono", monospace;
-  }
-  * { box-sizing: border-box; margin: 0; }
-  html, body { background: #000; }
-  body { display: grid; place-items: center; min-height: 100vh; }
-  #stage { position: relative; overflow: hidden; background: var(--bg); color: var(--fg); font-family: var(--sans); }
-  .render #stage { cursor: none; }
-  #progress { position: absolute; left: 0; top: 0; height: 8px; width: 100%; background: var(--accent); transform-origin: left; z-index: 2; }
-
-  .scene { position: absolute; inset: 0; opacity: 0; }
-  .head { position: absolute; }
-  .chip { display: inline-block; font: 600 var(--chip) var(--mono); color: var(--accent); border: 2px solid var(--accent); border-radius: 999px; padding: 6px 22px; }
-  .title { font-size: var(--title); font-weight: 800; letter-spacing: -1px; margin-top: 22px; }
-  .body { position: absolute; left: 0; width: 100%; transform-origin: 50% 0; }
-  pre, .points { position: absolute; background: var(--panel); border: 2px solid var(--border); border-radius: 22px; padding: 34px 36px; font: var(--code)/1.5 var(--mono); color: var(--fg); white-space: pre; }
-  pre .ln { display: block; min-height: 1.5em; }
-  .points { white-space: normal; font: 600 var(--cap)/1.3 var(--sans); display: flex; flex-direction: column; gap: .6em; }
-  .points .ln::before { content: "→ "; color: var(--accent); }
-  .points code, .cap code { font: 600 .9em var(--mono); color: var(--pkg); }
-  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); } .num { color: var(--num); } .fn { color: var(--fn); } .pkg { color: var(--pkg); }
-  mark { color: inherit; background: var(--mark); border-radius: 6px; padding: 0 4px; outline: 2px solid transparent; }
-  .diagram { position: absolute; border: 2px solid var(--border); border-radius: 21px; transform-origin: 0 0; }
-  .cap { position: absolute; font-size: var(--cap); line-height: 1.25; font-weight: 700; }
-
-  .center { position: absolute; left: 60px; right: 60px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 48px; }
-  .center img { width: 760px; max-width: 100%; }
-  .center pre { position: static; font-size: calc(var(--code) + 4px); }
-  .center .line { font-size: var(--cap); font-weight: 700; }
-</style>
+<link rel="stylesheet" href="reel.css">
 </head>
 <body>
 <div id="stage"><div id="progress"></div></div>
 <script type="module">
-import { LAYOUTS, pickSize, timeline, viewBox, highlight } from "./core.mjs";
+import { LAYOUTS, pickSize, timeline } from "./core.mjs";
+import { sceneElement, entrances, diagramReady } from "./scene-dom.mjs";
 
 // One timeline (seconds), built from scenes.json. Every motion is a Web Animation or a CSS animation inside a
 // diagram, so seek(t) can put the whole reel at any frame: live mode drives it from rAF, render.mjs frame by frame.
@@ -74,94 +41,27 @@ async function build() {
   for (const [k, v] of Object.entries(R.colors ?? {})) document.documentElement.style.setProperty(`--${k}`, v);
   for (const k of ["title", "chip", "code", "cap"]) stage.style.setProperty(`--${k}`, `${L[k]}px`);
   Object.assign(stage.style, { width: `${L.W}px`, height: `${L.H}px` });
-  const pkgs = R.packages ?? [];
   const { scenes: SCENES, total: t } = timeline(R);
   window.SCENES = SCENES; window.TOTAL = t; window.LAYOUT = L;
-  const sizeOf = async src => viewBox(await (await fetch(src)).text());
 
   for (const s of SCENES) {
-    const el = document.createElement("div");
-    el.className = "scene";
-    stage.appendChild(el);
-    if (s.type === "outro") {
-      el.innerHTML = `<div class="center">${s.logo ? `<img src="${s.logo}" alt="">` : ""}
-        ${s.code ? `<pre>${highlight(s.code, s.lang ?? "sh", pkgs)}</pre>` : ""}
-        ${(s.lines ?? []).map(l => `<div class="line">${l}</div>`).join("")}</div>`;
-    } else {
-      const lines = s.code ? s.code.split("\n").map(l => `<span class="ln">${highlight(l, s.lang ?? R.lang, pkgs)}</span>`).join("")
-        : (s.points ?? []).map(p => `<div class="ln">${p}</div>`).join("");
-      el.innerHTML = `<div class="head">${s.step ? `<span class="chip">${s.step}</span>` : ""}<div class="title">${s.title ?? ""}</div></div>
-        <div class="body">${s.code ? `<pre>${lines}</pre>` : `<div class="points">${lines}</div>`}
-        ${s.diagram ? `<iframe class="diagram" src="${s.diagram}" scrolling="no" tabindex="-1"></iframe>` : ""}
-        ${s.caption ? `<div class="cap">${s.caption}</div>` : ""}</div>`;
-      Object.assign(el.querySelector(".head").style, { left: `${L.head[0]}px`, right: `${L.head[0]}px`, top: `${L.head[1]}px` });
-      await place(el, s, L, s.diagram && await sizeOf(s.diagram));
-      const f = el.querySelector(".diagram");
-      if (f) frames.push({ el: f, scene: s });
-    }
+    const el = await sceneElement(stage, s, R, L);
+    const f = el.querySelector(".diagram");
+    if (f) frames.push({ el: f, scene: s });
 
     // scene in/out: 0.35s fade + slide; the first scene is already on screen at frame 0 (it is the reel's first impression)
     const len = s.end - s.start, fr = .35 / len, enter = s.start ? { opacity: 0, transform: "translateY(24px)" } : { opacity: 1, transform: "none" };
     at(el, [enter, { opacity: 1, transform: "none", offset: fr },
             { opacity: 1, transform: "none", offset: 1 - fr }, { opacity: 0, transform: "translateY(-24px)" }], s.start, len, "linear");
-    if (s.type !== "outro") {   // entrances; the first scene skips them so frame 0 is already complete
-      const enterAt = s.start ? 0 : -9;
-      el.querySelectorAll(".ln").forEach((ln, i) =>
-        at(ln, [{ opacity: 0, transform: "translateX(-16px)" }, { opacity: 1, transform: "none" }], s.start + enterAt + .3 + i * .12, .35));
-      const line = getComputedStyle(document.documentElement).getPropertyValue("--mark-line").trim();
-      el.querySelectorAll("mark").forEach(mk =>
-        at(mk, [{ outlineColor: "transparent" }, { outlineColor: line }, { outlineColor: "transparent" }], s.start + 1.6, 1.4));
-      const d = el.querySelector(".diagram"), c = el.querySelector(".cap");
-      if (d) at(d, [{ opacity: 0 }, { opacity: 1 }], s.start + enterAt + .6, .5);
-      if (c) at(c, [{ opacity: 0, transform: "translateY(16px)" }, { opacity: 1, transform: "none" }], s.start + enterAt + 1.2, .5);
-    }
+    if (s.type !== "outro")    // entrances; the first scene skips them so frame 0 is already complete
+      for (const [node, kf, delay, dur, easing] of entrances(el, { skip: !s.start })) at(node, kf, s.start + delay, dur, easing);
   }
   at(document.getElementById("progress"), [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], 0, t, "linear");
   anims.forEach(a => a.pause());
 }
 
-// Stack (9:16, 1:1): panel, diagram at the panel's width, caption, top to bottom.
-// Side (16:9): panel left, diagram right, caption under both. Either way the body shrinks to fit above the safe zone.
-async function place(el, s, L, dsize) {
-  const body = el.querySelector(".body"), panel = el.querySelector("pre, .points"), d = el.querySelector(".diagram"), cap = el.querySelector(".cap");
-  body.style.top = `${L.top}px`;
-  const inner = L.W - 2 * L.pad;
-  let bottom;
-  if (L.mode === "stack" || !d) {
-    Object.assign(panel.style, { left: `${L.pad}px`, right: `${L.pad}px`, top: "0px" });
-    bottom = panel.offsetHeight;
-    if (d) {
-      const k = inner / dsize[0];
-      Object.assign(d.style, { left: `${L.pad}px`, top: `${bottom + 44}px`, width: `${dsize[0]}px`, height: `${dsize[1]}px`, transform: `scale(${+k.toFixed(4)})` });
-      bottom += 44 + dsize[1] * +k.toFixed(4);
-    }
-  } else {
-    Object.assign(panel.style, { left: `${L.pad}px`, width: `${L.split}px`, top: "0px" });
-    const left = L.pad + L.split + 40, k = (L.W - L.pad - left) / dsize[0];
-    Object.assign(d.style, { left: `${left}px`, top: "0px", width: `${dsize[0]}px`, height: `${dsize[1]}px`, transform: `scale(${+k.toFixed(4)})` });
-    bottom = Math.max(panel.offsetHeight, dsize[1] * k);
-  }
-  if (cap) {
-    Object.assign(cap.style, { left: `${L.capInset[0]}px`, right: `${L.capInset[1]}px`, top: `${bottom + 48}px` });
-    bottom += 48 + cap.offsetHeight;
-  }
-  const room = L.H - L.safe - L.top;
-  if (bottom > room) body.style.transform = `scale(${room / bottom})`;
-  else if (L.mode === "side") body.style.top = `${L.top + (room - bottom) / 2}px`;   // wide frame: centre the block
-}
-
-// Diagrams follow prefers-color-scheme and prefers-reduced-motion; pin them to dark + full motion.
-function prepare(doc) {
-  for (const sheet of doc.styleSheets) for (const rule of sheet.cssRules) {
-    if (!rule.media) continue;
-    if (rule.media.mediaText.includes("prefers-color-scheme: dark")) rule.media.mediaText = "all";
-    if (rule.media.mediaText.includes("prefers-reduced-motion")) rule.media.mediaText = "not all";
-  }
-}
-window.ready = build().then(() => Promise.all(frames.map(({ el }) => new Promise(ok => {
-  const done = () => { prepare(el.contentDocument); ok(); };
-  el.contentDocument?.readyState === "complete" && el.contentDocument.styleSheets.length ? done() : el.addEventListener("load", done, { once: true });
-})).concat(document.fonts.ready, ...[...document.images].map(i => i.decode()))));
+window.ready = build().then(() => Promise.all(frames.map(({ el }) => diagramReady(el)))
+  .then(() => Promise.all([document.fonts.ready, ...[...document.images].map(i => i.decode())])));
 
 window.seek = t => {
   for (const a of anims) a.currentTime = t * 1000;
