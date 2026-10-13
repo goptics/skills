@@ -112,7 +112,7 @@ Each scene's `say` holds its voice-over words. It is the single source: `node re
 - Read it aloud against the live mode (`node render.mjs --serve`; ←/→ jumps scenes, space pauses) once. If a line doesn't fit its scene, shorten the line or lengthen the scene, then re-render.
 - `node render.mjs --check` validates `scenes.json` (unknown keys, bad durations, malformed `steps`) without opening a browser.
 
-Other optional scene fields, used by the voice-over and slides modes: `steps` (diagram-loop seconds where a slide pauses), `slide` (overrides for the slide version: title, points, code, caption, notes) and, top level, `audio` (voice provider and music).
+Other optional fields: `steps` and `slide` for the deck (`references/slides.md`), `audio` for a voice (`references/audio.md`), `focus` and `renderer` for Remotion (`references/remotion.md`). With a voice, scene durations stretch to fit the spoken lines, and `reel.srt` carries the spoken words.
 
 ## Check before handing over
 

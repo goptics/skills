@@ -24,7 +24,9 @@ import { sceneElement, entrances, diagramReady } from "./scene-dom.mjs";
 //             { duration, type: "outro", logo, code (shell by default), lines: [HTML] } ],
 //   cover: see cover.html }
 // v2, all optional (validated by core.mjs validate()): scene say (voice-over words → SCRIPT.md, TTS, slide notes),
-//   steps [diagram-loop seconds where slides pause], slide { overrides for the slide version }, top-level audio { voice, music }.
+//   steps [diagram-loop seconds where slides pause], slide { overrides for the slide version },
+//   focus { at: [from, to], box: [x, y, w, h] } (Remotion only), voice (recorded file for this scene);
+//   top level: audio { voice: { provider, … }, music: { file, volume, duck }, lead, tail }, renderer, slides { size }.
 // Languages: go, js/ts, python, rust, sh; anything else renders as plain text. Needs http (render.mjs serves it).
 const params = new URLSearchParams(location.search);
 const stage = document.getElementById("stage");

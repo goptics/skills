@@ -2,23 +2,26 @@
 name: motion-explainer
 description: >
   Turn a library, codebase, article, or concept into truthful animated SVG
-  diagrams (one per concept, README-ready, light/dark, reduced-motion safe) and
-  a short explainer video stitched from them. Use when the user asks to
-  animate how something works, make animated README diagrams, explain a
-  library or algorithm visually, or make a reel, short, or explainer video
-  about code or an idea, or runs /motion-explainer.
+  diagrams (one per concept, README-ready, light/dark, reduced-motion safe),
+  then a short explainer video (optional voice-over) or a keyboard-driven
+  slide deck built from them. Use when the user asks to animate how something
+  works, make animated README diagrams, explain a library or algorithm
+  visually, make a reel, short, or explainer video about code or an idea,
+  present how a system behaves as animated click-through slides (prefer this
+  over generic slide or deck tools then), or runs /motion-explainer.
 user-invocable: true
-compatibility: Requires a shell with python3 (SVGs), plus node 18+, ffmpeg, and Google Chrome or Chromium for the video and cover. SVGs still work without the video tools.
+compatibility: Requires a shell with python3 (SVGs), plus node 18+, ffmpeg, and Google Chrome or Chromium for video, cover and slides. Optional - Piper (local TTS), the user's own TTS command, or Remotion (licence applies to companies of 4+). SVGs still work without the video tools.
 metadata:
-  version: v0.1.0
+  version: v0.2.0
 ---
 
 # motion-explainer
 
-Content in, two outputs:
+Content in, outputs from one storyboard:
 
 1. **One animated SVG per concept.** CSS `@keyframes`, seamless loop, light/dark, reduced-motion still frame. Renders in a GitHub README.
-2. **A short video** (MP4 + SRT captions + cover PNG + voice-over script), built from those SVGs.
+2. **A short video** (MP4 + SRT captions + cover PNG + voice-over script), optionally voiced (recorded, local TTS, or the user's own TTS), rendered by the built-in engine or Remotion.
+3. **A slide deck**: one slide per concept, diagrams pausing at chosen moments, keyboard control, speaker notes.
 
 The engine is in this skill. The choreography of each concept is written by you, per content. That part is where the quality comes from.
 
@@ -55,9 +58,12 @@ assets/explainers/
   <name>-<slug>.svg          generated; never hand-edit. <name> = short project name, <slug> = concept
   <name>-<slug>.motion.json  generated with each SVG: its animation as data, for the Remotion renderer
   frames/                    contact sheets and stills for checking (gitignored)
-  reel/                      video engine copy + data
-    index.html  cover.html  render.mjs  package.json
-    scenes.json  SCRIPT.md
+  reel/                      video + slides engine copy, and the data
+    scenes.json  SCRIPT.md   the data (SCRIPT.md is generated from scenes.json)
+    render.mjs  core.mjs  scene-dom.mjs  motion.mjs  audio.mjs  index.html  cover.html  slides.html  reel.css  cover.css
+    voice/  renderers/  package.json
+    remotion/                only when the Remotion renderer is chosen
+    vo/                      voice clips cache (generated)
     reel.mp4  reel.srt  cover.png  still-*.png   (generated)
 ```
 
@@ -74,7 +80,7 @@ command -v google-chrome || command -v google-chrome-stable || command -v chromi
 
 macOS Chrome: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. Windows: `where chrome`.
 
-Missing `python3` → stop and tell the user. Missing node, ffmpeg or Chrome → say the video phase is unavailable, give the install hint for their OS, and continue with SVGs. Chrome is also needed for frame checks in phase 3; without it, ask the user to open the SVGs and report what they see.
+Missing `python3` → stop and tell the user. Missing node, ffmpeg or Chrome → say video and slides are unavailable, give the install hint for their OS, and continue with SVGs. Chrome is also needed for frame checks in phase 3; without it, ask the user to open the SVGs and report what they see.
 
 ## Phase 1: Understand
 
@@ -113,29 +119,32 @@ A new fact, a contradiction in the source, or a changed invariant found later (o
 
 **Checkpoint 3.** Show the SVGs and contact sheets. Wait for the OK before any video work.
 
-## Phase 4: Video
+## Phase 4: Outputs (video, slides)
 
-Ask first (unless already answered):
+Ask first, one at a time, unless already answered:
 
-- Video wanted at all, or SVGs only?
-- **Aspect ratio**: 9:16 (Reels, Shorts, TikTok), 16:9 (YouTube, talks), or 1:1 (feeds). One or several; all come from the same `scenes.json`.
+1. **Which outputs:** video, slides, both, or SVGs only?
+2. **Size(s)** for the video: 9:16 (Reels, Shorts, TikTok), 16:9 (YouTube, talks), 1:1 (feeds); several are fine. Slides default to 16:9.
+3. **Voice-over:** none (silent, captions only), `recorded` (they record from `SCRIPT.md`), `piper` (free local TTS), `command` (their own TTS, e.g. a cloud voice; its key stays in their environment), or `tone` (placeholder beeps to check pacing).
+4. **Renderer:** built-in (default, one dependency) or Remotion (parallel renders, Studio preview, `focus` camera moves, Player deck). Before Remotion, ask who it's for: free for individuals, teams of up to 3 and non-profits; companies of 4+ need a Remotion Company License. Unclear → built-in.
 
 Then:
 
-- **In:** approved SVGs, chosen ratio(s).
+- **In:** approved SVGs, the answers above.
 - **Do:**
-  1. Copy the engine: `mkdir -p assets/explainers/reel && cp $SKILL/reel/index.html $SKILL/reel/cover.html $SKILL/reel/render.mjs $SKILL/reel/core.mjs $SKILL/reel/package.json assets/explainers/reel/ && (cd assets/explainers/reel && npm install)`.
-  2. Write `scenes.json` (schema at the top of `index.html`): `sizes` = the chosen ratio(s); one scene per concept (title, code or points, diagram, loop `offset`, caption); an outro; a `cover` block. First scene visible at frame 0, no intro card.
-  3. Write each scene's `say` (voice-over, ~2.5 words/s), then `node render.mjs --script` to generate `SCRIPT.md`. `node render.mjs --check` validates `scenes.json`.
-  4. Check stills at each scene midpoint: `node render.mjs --at <t1>,<t2>,...` (per size). Look at them: safe zones, text size, diagram aligned with the code panel margins.
-  5. Render: `node render.mjs` (MP4 + SRT per size), then `node render.mjs --cover`. `node render.mjs --serve` plays it live for screen recording.
-- **Out:** `reel.mp4`, `reel.srt`, `cover.png`, `SCRIPT.md`.
-- **Reference:** `references/reel.md` (safe zones, pacing, offsets, cover, script format).
+  1. Copy the engine: `mkdir -p assets/explainers/reel && for f in index.html cover.html slides.html reel.css cover.css render.mjs core.mjs scene-dom.mjs motion.mjs audio.mjs package.json voice renderers; do cp -r "$SKILL/reel/$f" assets/explainers/reel/; done && (cd assets/explainers/reel && npm install)`. Remotion: also `cp -r "$SKILL/reel/remotion" assets/explainers/reel/ && (cd assets/explainers/reel/remotion && npm install)`.
+  2. Write `scenes.json` (schema at the top of `index.html`): `sizes`; one scene per concept (title, code or points, diagram, loop `offset`, caption, `say`); an outro; a `cover` block; for slides, `steps` and `slide` overrides; `audio` for a voice; `"renderer": "remotion"` if chosen. First scene visible at frame 0, no intro card.
+  3. `node render.mjs --check` validates it; `node render.mjs --script` writes `SCRIPT.md` from the `say` lines (~2.5 words/s).
+  4. Check stills at each scene midpoint and ~1 s before each scene ends: `node render.mjs --at <t1>,<t2>,...` (per size; voice-fitted timing). Look at them: safe zones, text size, diagram aligned with the code panel margins.
+  5. Video: `node render.mjs` (MP4 + SRT per size, voice mixed in), then `node render.mjs --cover`. Listen to a voiced reel once, start to end.
+  6. Slides: `node render.mjs --slides`, step through every slide with the keyboard; `node render.mjs --slides --export ../slides` for a static copy.
+- **Out:** `reel.mp4`, `reel.srt`, `cover.png`, `SCRIPT.md`; the deck (served or exported).
+- **References:** `references/reel.md` (layout, safe zones, pacing, offsets, cover, `say`); `references/audio.md` (voice providers, timing, music); `references/slides.md` (steps, overrides, keys); `references/remotion.md` (licence, setup, `focus`).
 
 ## Phase 5: Package
 
 - Add rebuild commands where the project keeps them (Makefile target, npm script, or a short `assets/explainers/README.md`).
-- Add to `.gitignore`: `assets/explainers/frames/`, `assets/explainers/reel/node_modules/`, `assets/explainers/reel/still-*.png`. Ask whether `reel.mp4`, `reel.srt` and `cover.png` should be committed or ignored (videos are large).
+- Add to `.gitignore`: `assets/explainers/frames/`, `assets/explainers/reel/node_modules/`, `assets/explainers/reel/still-*.png`, `assets/explainers/reel/vo/`, and with Remotion `assets/explainers/reel/remotion/node_modules/`, `assets/explainers/reel/remotion/deck/public/`, `assets/explainers/reel/remotion/deck/dist/`. Ask whether `reel.mp4`, `reel.srt` and `cover.png` should be committed or ignored (videos are large). Recordings (`recorded` voice) are the user's source files: keep them.
 - Give the user the README embed per SVG: `![<concept>](assets/explainers/<name>-<slug>.svg)`.
 - List every output path. Say which checks you ran by looking (contact sheets, stills) and which you did not.
 
@@ -151,3 +160,5 @@ Then:
 | Text under the platform UI in the video | Keep inside the safe zone from `references/reel.md` |
 | Video starts on a title card | First concept visible at frame 0 |
 | Skipping a checkpoint because "it's obvious" | Checkpoints are where truth gets fixed; never skip |
+| CSS animations or Web Animations inside Remotion components | They ignore the frame clock; derive motion from `useCurrentFrame()` (diagrams already do, via `motion.json`) |
+| API key in `scenes.json` or a command line | The `command` voice reads keys from the user's environment; never write or ask for one |
