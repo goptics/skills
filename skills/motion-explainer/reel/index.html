@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Explainer reel</title>
+<link rel="stylesheet" href="reel.css">
+</head>
+<body>
+<div id="stage"><div id="progress"></div></div>
+<script type="module">
+import { LAYOUTS, pickSize, timeline } from "./core.mjs";
+import { sceneElement, entrances, diagramReady } from "./scene-dom.mjs";
+
+// One timeline (seconds), built from scenes.json. Every motion is a Web Animation or a CSS animation inside a
+// diagram, so seek(t) can put the whole reel at any frame: live mode drives it from rAF, render.mjs frame by frame.
+//   ?size=9:16|16:9|1:1  picks the layout (default: scenes.json "size", else 9:16)   ?render  hands control to render.mjs
+// Sizes, layouts, highlighter and timeline live in core.mjs (shared with cover.html and render.mjs).
+//
+// scenes.json: { title, size | sizes: ["9:16", "16:9", "1:1"], lang (default code language), packages: [names
+//   coloured as packages before "." or "::"], colors: { accent: "#…", … CSS variables }, root (served folder, default ".."),
+//   scenes: [ { duration (s), step ("1 / 4"), title, code (⟦…⟧ marks a highlight) | points: [HTML lines], lang,
+//               diagram (path from this folder), offset (s into the diagram's loop at scene start), caption (HTML) },
+//             { duration, type: "outro", logo, code (shell by default), lines: [HTML] } ],
+//   cover: see cover.html }
+// v2, all optional (validated by core.mjs validate()): scene say (voice-over words → SCRIPT.md, TTS, slide notes),
+//   steps [diagram-loop seconds where slides pause], slide { overrides for the slide version },
+//   focus { at: [from, to], box: [x, y, w, h] } (Remotion only), voice (recorded file for this scene);
+//   top level: audio { voice: { provider, … }, music: { file, volume, duck }, lead, tail }, renderer, slides { size }.
+// Languages: go, js/ts, python, rust, sh; anything else renders as plain text. Needs http (render.mjs serves it).
+const params = new URLSearchParams(location.search);
+const stage = document.getElementById("stage");
+const anims = [];          // page-level Web Animations, all on the reel timeline (delay = absolute start)
+const frames = [];         // { el, scene } diagram iframes, seeked separately
+const at = (el, keyframes, start, dur, easing = "cubic-bezier(.2, .7, .2, 1)") =>
+  anims.push(el.animate(keyframes, { delay: start * 1000, duration: dur * 1000, fill: "both", easing }));
+
+// ---- build ----
+async function build() {
+  const R = await (await fetch("scenes.json")).json();
+  const L = LAYOUTS[pickSize(R, params.get("size") ?? undefined)];
+  if (R.title) document.title = R.title;
+  for (const [k, v] of Object.entries(R.colors ?? {})) document.documentElement.style.setProperty(`--${k}`, v);
+  for (const k of ["title", "chip", "code", "cap"]) stage.style.setProperty(`--${k}`, `${L[k]}px`);
+  Object.assign(stage.style, { width: `${L.W}px`, height: `${L.H}px` });
+  const { scenes: SCENES, total: t } = timeline(R);
+  window.SCENES = SCENES; window.TOTAL = t; window.LAYOUT = L;
+
+  for (const s of SCENES) {
+    const el = await sceneElement(stage, s, R, L);
+    const f = el.querySelector(".diagram");
+    if (f) frames.push({ el: f, scene: s });
+
+    // scene in/out: 0.35s fade + slide; the first scene is already on screen at frame 0 (it is the reel's first impression)
+    const len = s.end - s.start, fr = .35 / len, enter = s.start ? { opacity: 0, transform: "translateY(24px)" } : { opacity: 1, transform: "none" };
+    at(el, [enter, { opacity: 1, transform: "none", offset: fr },
+            { opacity: 1, transform: "none", offset: 1 - fr }, { opacity: 0, transform: "translateY(-24px)" }], s.start, len, "linear");
+    if (s.type !== "outro")    // entrances; the first scene skips them so frame 0 is already complete
+      for (const [node, kf, delay, dur, easing] of entrances(el, { skip: !s.start })) at(node, kf, s.start + delay, dur, easing);
+  }
+  at(document.getElementById("progress"), [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], 0, t, "linear");
+  anims.forEach(a => a.pause());
+}
+
+window.ready = build().then(() => Promise.all(frames.map(({ el }) => diagramReady(el)))
+  .then(() => Promise.all([document.fonts.ready, ...[...document.images].map(i => i.decode())])));
+
+window.seek = t => {
+  for (const a of anims) a.currentTime = t * 1000;
+  for (const { el, scene } of frames) {
+    if (t < scene.start - .5 || t > scene.end + .5) continue;
+    const local = Math.max(0, t - scene.start + (scene.offset ?? 0)) * 1000;
+    for (const a of el.contentDocument.getAnimations()) { a.pause(); a.currentTime = local; }
+  }
+};
+
+// Live mode: play in real time. ←/→ jump scenes, space pauses. ?render leaves control to render.mjs.
+if (params.has("render")) {
+  document.documentElement.classList.add("render");
+} else window.ready.then(() => {
+  const { W, H } = LAYOUT, fit = () => stage.style.zoom = Math.min(innerWidth / W, innerHeight / H);  // whole frame on screen
+  fit(); addEventListener("resize", fit);
+  document.body.style.overflow = "hidden";
+  let t0 = performance.now(), paused = null;
+  const now = () => paused ?? ((performance.now() - t0) / 1000) % TOTAL;
+  const jump = t => { t0 = performance.now() - t * 1000; if (paused !== null) paused = t; };
+  addEventListener("keydown", e => {
+    const t = now(), i = SCENES.findIndex(s => t >= s.start && t < s.end);
+    if (e.key === "ArrowRight") jump(SCENES[(i + 1) % SCENES.length].start);
+    else if (e.key === "ArrowLeft") jump(SCENES[t - SCENES[i].start < 1 ? Math.max(0, i - 1) : i].start);
+    else if (e.key === " ") { if (paused === null) paused = t; else { paused = null; jump(t); } }
+    else return;
+    e.preventDefault();
+  });
+  (function tick() { seek(now()); requestAnimationFrame(tick); })();
+});
+</script>
+</body>
+</html>

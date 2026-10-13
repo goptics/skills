@@ -1,0 +1,34 @@
+/* index.html styles; shared with the Remotion engine (remotion/src). */
+:root {
+  --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3; --muted: #9198a1;
+  --accent: #3fb950; --mark: rgba(210, 153, 34, .28); --mark-line: #d29922;
+  --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e; --num: #79c0ff; --fn: #d2a8ff; --pkg: #ffa657;
+  --sans: system-ui, -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "JetBrains Mono", "DejaVu Sans Mono", "Noto Sans Mono", monospace;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { background: #000; }
+body { display: grid; place-items: center; min-height: 100vh; }
+#stage { position: relative; overflow: hidden; background: var(--bg); color: var(--fg); font-family: var(--sans); }
+.render #stage { cursor: none; }
+#progress { position: absolute; left: 0; top: 0; height: 8px; width: 100%; background: var(--accent); transform-origin: left; z-index: 2; }
+
+.scene { position: absolute; inset: 0; opacity: 0; }
+.head { position: absolute; }
+.chip { display: inline-block; font: 600 var(--chip) var(--mono); color: var(--accent); border: 2px solid var(--accent); border-radius: 999px; padding: 6px 22px; }
+.title { font-size: var(--title); font-weight: 800; letter-spacing: -1px; margin-top: 22px; }
+.body { position: absolute; left: 0; width: 100%; transform-origin: 50% 0; }
+pre, .points { position: absolute; background: var(--panel); border: 2px solid var(--border); border-radius: 22px; padding: 34px 36px; font: var(--code)/1.5 var(--mono); color: var(--fg); white-space: pre; }
+pre .ln { display: block; min-height: 1.5em; }
+.points { white-space: normal; font: 600 var(--cap)/1.3 var(--sans); display: flex; flex-direction: column; gap: .6em; }
+.points .ln::before { content: "→ "; color: var(--accent); }
+.points code, .cap code { font: 600 .9em var(--mono); color: var(--pkg); }
+.kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); } .num { color: var(--num); } .fn { color: var(--fn); } .pkg { color: var(--pkg); }
+mark { color: inherit; background: var(--mark); border-radius: 6px; padding: 0 4px; outline: 2px solid transparent; }
+.diagram { position: absolute; border: 2px solid var(--border); border-radius: 21px; transform-origin: 0 0; }
+.cap { position: absolute; font-size: var(--cap); line-height: 1.25; font-weight: 700; }
+
+.center { position: absolute; left: 60px; right: 60px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 48px; }
+.center img { width: 760px; max-width: 100%; }
+.center pre { position: static; font-size: calc(var(--code) + 4px); }
+.center .line { font-size: var(--cap); font-weight: 700; }

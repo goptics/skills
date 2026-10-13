@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Explainer slides</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="reel.css">
+<style>
+  body { overflow: hidden; }
+  .scene { opacity: 0; transition: opacity .35s linear; }
+  .scene.on { opacity: 1; }
+  #hud { position: fixed; right: 16px; bottom: 12px; font: 600 14px var(--mono); color: var(--muted); opacity: .7; z-index: 3; }
+  #help { position: fixed; inset: 0; display: none; place-items: center; background: rgba(0, 0, 0, .75); z-index: 4; color: var(--fg); font: 18px/1.7 var(--sans); }
+  #help.on { display: grid; }
+  #help kbd { font: 600 15px var(--mono); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; background: var(--panel); }
+</style>
+</head>
+<body>
+<div id="stage"><div id="progress"></div></div>
+<div id="hud"></div>
+<div id="help"><div>
+  <kbd>→</kbd> <kbd>Space</kbd> <kbd>PgDn</kbd> next step · <kbd>←</kbd> <kbd>PgUp</kbd> previous<br>
+  <kbd>Home</kbd> / <kbd>End</kbd> first / last · <kbd>1</kbd>–<kbd>9</kbd> jump to slide<br>
+  <kbd>F</kbd> fullscreen · <kbd>S</kbd> speaker notes · <kbd>P</kbd> pause / play · <kbd>R</kbd> restart slide · <kbd>?</kbd> this help
+</div></div>
+<script type="module">
+// Slide deck from scenes.json: one slide per scene (slide overrides applied, notes = say), keyboard driven.
+// Diagrams play live; a scene's "steps" (diagram-loop seconds) pause it there until the presenter advances.
+// ?size=16:9|9:16|1:1 (default: scenes.json slides.size, else 16:9). #<n> in the URL keeps the slide on reload.
+import { LAYOUTS, pickSize, slideOf } from "./core.mjs";
+import { sceneElement, entrances, diagramReady } from "./scene-dom.mjs";
+
+const stage = document.getElementById("stage"), hud = document.getElementById("hud"), help = document.getElementById("help");
+const R = await (await fetch("scenes.json")).json();
+const size = pickSize(R, new URLSearchParams(location.search).get("size") ?? R.slides?.size ?? "16:9");
+const L = LAYOUTS[size];
+document.title = `${R.title ?? "Explainer"}: slides`;
+for (const [k, v] of Object.entries(R.colors ?? {})) document.documentElement.style.setProperty(`--${k}`, v);
+for (const k of ["title", "chip", "code", "cap"]) stage.style.setProperty(`--${k}`, `${L[k]}px`);
+Object.assign(stage.style, { width: `${L.W}px`, height: `${L.H}px` });
+const fit = () => stage.style.zoom = Math.min(innerWidth / L.W, innerHeight / L.H);
+fit(); addEventListener("resize", fit);
+
+const slides = [];
+for (const s of R.scenes.map(slideOf)) {
+  const el = await sceneElement(stage, s, R, L), frame = el.querySelector(".diagram");
+  slides.push({ s, el, frame, steps: s.steps ?? [], anims: [] });
+}
+await Promise.all(slides.filter(x => x.frame).map(x => diagramReady(x.frame)));
+
+// ---- diagram clock: the iframe's CSS animations, seeked / played / paused as a group ----
+const clock = x => x.frame?.contentDocument.getAnimations() ?? [];
+const seekDiagram = (x, t) => clock(x).forEach(a => { a.currentTime = t * 1000; });
+const loopOf = x => (clock(x)[0]?.effect.getTiming().duration ?? 1e9) / 1000;
+let target = null;                                   // { x, t }: play until the diagram reaches t, then hold
+function playTo(x, t) {
+  target = t === undefined ? null : { x, t };
+  clock(x).forEach(a => a.play());
+}
+(function watch() {
+  if (target) {
+    const a = clock(target.x)[0];
+    if (a && a.currentTime / 1000 >= target.t) { seekDiagram(target.x, target.t); clock(target.x).forEach(b => b.pause()); target = null; render(); }
+  }
+  requestAnimationFrame(watch);
+})();
+
+// ---- deck state: slide i; k = pause point reached (steps[k]), k = steps.length = past the last one, loop on ----
+let i = Math.min(slides.length - 1, Math.max(0, (parseInt(location.hash.slice(1)) || 1) - 1)), k = 0, paused = false;
+const notes = new BroadcastChannel("slides-notes");
+const hold = (x, t) => { target = null; seekDiagram(x, t); clock(x).forEach(a => a.pause()); };
+
+function enter(n, step = 0) {
+  slides[i]?.el.classList.remove("on");
+  slides[i]?.anims.forEach(a => a.cancel());
+  clock(slides[i] ?? {}).forEach(a => a.pause());
+  i = n; k = step;
+  const x = slides[i];
+  x.el.classList.add("on");
+  x.anims = step ? [] : entrances(x.el).map(([node, kf, delay, dur, easing]) =>
+    node.animate(kf, { delay: delay * 1000, duration: dur * 1000, fill: "both", easing }));
+  if (x.frame) {
+    if (step && step < x.steps.length) hold(x, x.steps[step]);        // arriving backwards: hold at that pause point
+    else { seekDiagram(x, x.s.offset ?? 0); x.steps.length ? playTo(x, x.steps[0]) : playTo(x); }
+  }
+  history.replaceState(null, "", `#${i + 1}`);
+  render();
+}
+function next() {
+  const x = slides[i];
+  if (target) { hold(target.x, target.t); return render(); }          // still moving: finish this step at once
+  if (x.frame && k < x.steps.length) { k++; k < x.steps.length ? playTo(x, x.steps[k]) : playTo(x); return render(); }
+  if (i < slides.length - 1) enter(i + 1);
+}
+function prev() {
+  const x = slides[i];
+  if (x.frame && k > 0) { k--; hold(x, x.steps[k]); return render(); }
+  if (i > 0) enter(i - 1, Math.max(0, slides[i - 1].steps.length - 1));
+}
+function render() {
+  const x = slides[i];
+  hud.textContent = `${i + 1} / ${slides.length}${x.steps.length ? `  ·  step ${Math.min(k + 1, x.steps.length)} / ${x.steps.length}${k === x.steps.length ? " (looping)" : ""}` : ""}${paused ? "  ·  paused" : ""}`;
+  document.getElementById("progress").style.transform = `scaleX(${(i + 1) / slides.length})`;
+  notes.postMessage({ i, k, title: x.s.title ?? (x.s.type === "outro" ? "Outro" : ""), notes: x.s.notes ?? "", next: slides[i + 1]?.s.title ?? "" });
+}
+function openNotes() {
+  const notesWin = open("", "slides-notes", "width=560,height=420");
+  notesWin.document.write(`<!doctype html><title>Speaker notes</title><body style="font:20px/1.5 system-ui;background:#0d1117;color:#e6edf3;padding:24px">
+    <div id=h style="color:#9198a1;font:600 14px ui-monospace,monospace"></div><h2 id=t></h2><p id=n></p><div id=x style="color:#9198a1"></div>
+    <script>new BroadcastChannel("slides-notes").onmessage=e=>{const d=e.data;h.textContent="slide "+(d.i+1)+(d.k?" · step "+d.k:"");t.textContent=d.title;n.textContent=d.notes;x.textContent=d.next?"next: "+d.next:""}<\/script>`);
+  notesWin.document.close();
+  setTimeout(render, 100);
+}
+
+addEventListener("keydown", e => {
+  const key = e.key;
+  if (["ArrowRight", " ", "PageDown", "Enter"].includes(key)) next();
+  else if (["ArrowLeft", "PageUp", "Backspace"].includes(key)) prev();
+  else if (key === "Home") enter(0);
+  else if (key === "End") enter(slides.length - 1);
+  else if (/^[1-9]$/.test(key) && +key <= slides.length) enter(+key - 1);
+  else if (key === "f" || key === "F") document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  else if (key === "s" || key === "S") openNotes();
+  else if (key === "p" || key === "P") { paused = !paused; clock(slides[i]).forEach(a => (paused ? a.pause() : a.play())); render(); }
+  else if (key === "r" || key === "R") enter(i);
+  else if (key === "?") help.classList.toggle("on");
+  else if (key === "Escape") help.classList.remove("on");
+  else return;
+  e.preventDefault();
+});
+enter(i);
+window.deck = { next, prev, enter, state: () => ({ i, k, steps: slides[i].steps.length, t: (clock(slides[i])[0]?.currentTime ?? 0) / 1000, target }) };
+window.ready = Promise.resolve();
+</script>
+</body>
+</html>

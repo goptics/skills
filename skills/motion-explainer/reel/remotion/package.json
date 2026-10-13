@@ -1,0 +1,22 @@
+{
+  "name": "explainer-remotion",
+  "private": true,
+  "type": "module",
+  "description": "Remotion engine for the explainer reel: same scenes.json and diagrams as the built-in engine, frame-driven.",
+  "scripts": {
+    "studio": "node ../render.mjs --renderer remotion --serve",
+    "slides": "node ../render.mjs --renderer remotion --slides"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.529",
+    "@remotion/player": "4.0.529",
+    "@remotion/renderer": "4.0.529",
+    "@remotion/cli": "4.0.529",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.529"
+  },
+  "devDependencies": {
+    "vite": "8.3.1"
+  }
+}

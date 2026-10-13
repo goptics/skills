@@ -1,0 +1,98 @@
+[
+ {
+  "query": "can you make an animated svg for our README showing how the retry backoff in internal/retry/backoff.go works? like dots moving through attempts with the delays growing each time",
+  "should_trigger": true
+ },
+ {
+  "query": "I maintain a small rust crate (tokio rate limiter, token bucket in src/bucket.rs). want a ~60 second vertical video for linkedin + shorts explaining how it works, basic to advanced",
+  "should_trigger": true
+ },
+ {
+  "query": "animate how raft leader election works for my distributed systems lecture next week. something I can drop into slides (16:9) and it has to be accurate to the raft paper, my students will nitpick",
+  "should_trigger": true
+ },
+ {
+  "query": "our docs page for the job scheduler is just walls of text. turn the scheduler in pkg/sched into a few animated diagrams, one per concept (queueing, preemption, fairness)",
+  "should_trigger": true
+ },
+ {
+  "query": "make a reel explaining how git rebase actually works under the hood, with a cover image and a voiceover script i can read",
+  "should_trigger": true
+ },
+ {
+  "query": "visualize how consistent hashing moves keys when a node joins the ring. need a looping animation for a blog post, has to look ok in dark mode",
+  "should_trigger": true
+ },
+ {
+  "query": "/motion-explainer src/cache/lru.ts",
+  "should_trigger": true
+ },
+ {
+  "query": "i want a short explainer video about how refresh token rotation works in our auth service (services/auth/refresh.py), something we can post on twitter",
+  "should_trigger": true
+ },
+ {
+  "query": "turn this CRDT article into animated explainers: 'A G-Counter keeps one slot per replica. Each replica only increments its own slot. Merge takes the element-wise max, so merges commute and replicas converge.'",
+  "should_trigger": true
+ },
+ {
+  "query": "the README diagrams for my go worker pool are static pngs, I'd like them to actually animate - jobs flowing into the queue, workers spinning up and down",
+  "should_trigger": true
+ },
+ {
+  "query": "make a bar chart of the benchmark results in bench.txt comparing v1 vs v2 throughput, html is fine",
+  "should_trigger": false
+ },
+ {
+  "query": "draw an architecture diagram of our services (api gateway, auth, orders, postgres) as mermaid in docs/architecture.md",
+  "should_trigger": false
+ },
+ {
+  "query": "add a css loading spinner animation to the submit button in src/components/LoginButton.tsx, should respect prefers-reduced-motion",
+  "should_trigger": false
+ },
+ {
+  "query": "trim the first 5 seconds off demo.mp4 and burn in the subtitles from captions.srt with ffmpeg",
+  "should_trigger": false
+ },
+ {
+  "query": "set up a remotion project for our product launch video: logo intro, three feature slides with screenshots, background music, 30s",
+  "should_trigger": false
+ },
+ {
+  "query": "explain how python's GIL works and when threads actually help, I'm prepping for an interview",
+  "should_trigger": false
+ },
+ {
+  "query": "create a lottie animation of our mascot waving for the onboarding screen in the ios app",
+  "should_trigger": false
+ },
+ {
+  "query": "write a blog post explaining how our rate limiter works (src/ratelimit.go), with code snippets and a section on tuning",
+  "should_trigger": false
+ },
+ {
+  "query": "record an animated gif of the terminal showing our CLI install and first run for the README, asciinema style",
+  "should_trigger": false
+ },
+ {
+  "query": "convert docs/flow.svg to a 2x png for the slide deck and crop the whitespace",
+  "should_trigger": false
+ },
+ {
+  "query": "tomorrow i'm presenting how our raft leader election works (internal/raft/election.go) to the team. can you turn it into animated slides i can click through with the arrow keys, pausing at the important moments, with speaker notes",
+  "should_trigger": true
+ },
+ {
+  "query": "make a 60s reel explaining how the token bucket in pkg/ratelimit works, with a voice-over. i don't have a mic so use some local text to speech",
+  "should_trigger": true
+ },
+ {
+  "query": "build a pptx deck from q3_results.xlsx with one slide per region and a revenue bar chart on each",
+  "should_trigger": false
+ },
+ {
+  "query": "add a text-to-speech button to our react docs site so readers can listen to each article (src/components/ArticleView.tsx)",
+  "should_trigger": false
+ }
+]

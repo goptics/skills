@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Explainer cover</title>
+<link rel="stylesheet" href="cover.css">
+</head>
+<body>
+<div id="stage"><div id="band"><div id="col"></div></div></div>
+<script type="module">
+import { COVERS, pickSize, viewBox } from "./core.mjs";
+
+// Cover / thumbnail from scenes.json "cover": { logo, chip, headline (HTML), diagram, still (s), crop [x, y, w, h]
+// in diagram units, foot, hide [CSS selectors inside the diagram] }. ?size=9:16|16:9|1:1 as in index.html.
+// Sizes (COVERS) live in core.mjs; 9:16 keeps everything inside the middle band that profile grids show.
+const params = new URLSearchParams(location.search);
+window.ready = (async () => {
+  const R = await (await fetch("scenes.json")).json(), C = R.cover ?? {};
+  const S = COVERS[pickSize(R, params.get("size") ?? undefined)];
+  const stage = document.getElementById("stage"), band = document.getElementById("band"), col = document.getElementById("col");
+  for (const [k, v] of Object.entries(R.colors ?? {})) document.documentElement.style.setProperty(`--${k}`, v);
+  for (const k of ["h1", "logo", "chip", "foot", "gap"]) stage.style.setProperty(`--${k}`, `${S[k]}px`);
+  Object.assign(stage.style, { width: `${S.W}px`, height: `${S.H}px` });
+  Object.assign(band.style, { top: `${S.band[0]}px`, height: `${S.band[1] - S.band[0]}px` });
+  if (S.mode === "side") stage.classList.add("side");
+
+  let crop = "";
+  if (C.diagram) {
+    const [w, h] = viewBox(await (await fetch(C.diagram)).text()), [cx, cy, cw, ch] = C.crop ?? [0, 0, w, h], k = S.crop / cw;
+    crop = `<div class="crop" style="width:${S.crop}px;height:${Math.round(ch * k)}px"><iframe src="${C.diagram}" scrolling="no"
+      style="width:${w}px;height:${h}px;transform:scale(${+k.toFixed(4)});left:${Math.round(-cx * k)}px;top:${Math.round(-cy * k)}px"></iframe></div>`;
+  }
+  col.innerHTML = `<div class="text">${C.logo ? `<img class="logo" src="${C.logo}" alt="">` : ""}
+    ${C.chip ? `<div class="chip">${C.chip}</div>` : ""}${C.headline ? `<h1>${C.headline}</h1>` : ""}
+    ${S.mode === "side" && C.foot ? `<div class="foot">${C.foot}</div>` : ""}</div>${crop}
+    ${S.mode !== "side" && C.foot ? `<div class="foot">${C.foot}</div>` : ""}`;
+
+  const frame = col.querySelector("iframe");
+  if (frame) await new Promise(ok => frame.addEventListener("load", ok, { once: true }));
+  if (frame) {   // dark theme pinned, full motion, frozen at `still`; legend hidden (cropped anyway, noise on a cover)
+    const doc = frame.contentDocument;
+    for (const sheet of doc.styleSheets) for (const rule of sheet.cssRules) {
+      if (rule.media?.mediaText.includes("prefers-color-scheme: dark")) rule.media.mediaText = "all";
+      if (rule.media?.mediaText.includes("prefers-reduced-motion")) rule.media.mediaText = "not all";
+    }
+    for (const sel of C.hide ?? ["g:has(> .lg)"]) doc.querySelectorAll(sel).forEach(e => e.style.display = "none");
+    for (const a of doc.getAnimations()) { a.pause(); a.currentTime = (C.still ?? 0) * 1000; }
+  }
+  await Promise.all([document.fonts.ready, ...[...document.images].map(i => i.decode())]);
+  const room = S.band[1] - S.band[0], k = Math.min(1, room / col.offsetHeight, S.W * .96 / col.offsetWidth);
+  if (k < 1) col.style.transform = `scale(${k})`;   // shrink to fit the band rather than overflow it
+})();
+</script>
+</body>
+</html>

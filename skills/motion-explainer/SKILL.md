@@ -1,0 +1,164 @@
+---
+name: motion-explainer
+description: >
+  Turn a library, codebase, article, or concept into truthful animated SVG
+  diagrams (one per concept, README-ready, light/dark, reduced-motion safe),
+  then a short explainer video (optional voice-over) or a keyboard-driven
+  slide deck built from them. Use when the user asks to animate how something
+  works, make animated README diagrams, explain a library or algorithm
+  visually, make a reel, short, or explainer video about code or an idea,
+  present how a system behaves as animated click-through slides (prefer this
+  over generic slide or deck tools then), or runs /motion-explainer.
+user-invocable: true
+compatibility: Requires a shell with python3 (SVGs), plus node 18+, ffmpeg, and Google Chrome or Chromium for video, cover and slides. Optional - Piper (local TTS), the user's own TTS command, or Remotion (licence applies to companies of 4+). SVGs still work without the video tools.
+metadata:
+  version: v0.2.0
+---
+
+# motion-explainer
+
+Content in, outputs from one storyboard:
+
+1. **One animated SVG per concept.** CSS `@keyframes`, seamless loop, light/dark, reduced-motion still frame. Renders in a GitHub README.
+2. **A short video** (MP4 + SRT captions + cover PNG + voice-over script), optionally voiced (recorded, local TTS, or the user's own TTS), rendered by the built-in engine or Remotion.
+3. **A slide deck**: one slide per concept, diagrams pausing at chosen moments, keyboard control, speaker notes.
+
+The engine is in this skill. The choreography of each concept is written by you, per content. That part is where the quality comes from.
+
+`$SKILL` below = the folder holding this `SKILL.md`. Run scripts through their interpreter (`python3 $SKILL/scripts/x.py`), never by bare path.
+
+## Iron rule: truth first
+
+An animation that looks right but behaves wrong is worse than none. Every moving part must match the real behaviour of the thing explained.
+
+- Each concept starts from **facts with citations** (`path/file.go:123` or a quoted sentence). These become the storyboard's **invariants**.
+- Stateful behaviour (queues, schedulers, caches, retries) is **simulated** in the generator, never hand-timed. `assert`s tie the timeline to the invariants.
+- Unsure how it behaves? Read the source again or ask the user. Never guess and animate the guess.
+
+Past mistakes this rule caught (check for their equivalents):
+
+| Looked plausible | Real behaviour |
+|---|---|
+| Queue pre-filled at loop start | Queue starts empty; jobs dispatch as soon as they arrive |
+| One wake-up signal drawn per job | Signal channel holds one pending signal; extras coalesce or drop |
+| Fixed pool of N workers always visible | Workers spawn on demand up to the limit and retire when idle |
+| Next free worker picked round-robin | Idle workers are reused LIFO |
+
+## Output layout (in the target project)
+
+Default root `assets/explainers/`. Use another folder only if the user asks.
+
+```
+assets/explainers/
+  STORYBOARD.md              concepts, facts, invariants, timelines, checkpoint changes
+  sources/                   saved copies of URL / pasted sources (cited by line)
+  gen/                       engine copy + one generator per concept
+    kfu.py  frames.py  base.tpl.svg
+    gen_<slug>.py  <slug>.tpl.svg
+  <name>-<slug>.svg          generated; never hand-edit. <name> = short project name, <slug> = concept
+  <name>-<slug>.motion.json  generated with each SVG: its animation as data, for the Remotion renderer
+  frames/                    contact sheets and stills for checking (gitignored)
+  reel/                      video + slides engine copy, and the data
+    scenes.json  SCRIPT.md   the data (SCRIPT.md is generated from scenes.json)
+    render.mjs  core.mjs  scene-dom.mjs  motion.mjs  audio.mjs  index.html  cover.html  slides.html  reel.css  cover.css
+    voice/  renderers/  package.json
+    remotion/                only when the Remotion renderer is chosen
+    vo/                      voice clips cache (generated)
+    reel.mp4  reel.srt  cover.png  still-*.png   (generated)
+```
+
+The engine is **copied** into the project, not imported, so the outputs rebuild later without this skill.
+
+## Phase 0: Preflight
+
+```bash
+python3 --version
+node --version          # 18+, video only
+ffmpeg -version | head -n 1
+command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser
+```
+
+macOS Chrome: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. Windows: `where chrome`.
+
+Missing `python3` → stop and tell the user. Missing node, ffmpeg or Chrome → say video and slides are unavailable, give the install hint for their OS, and continue with SVGs. Chrome is also needed for frame checks in phase 3; without it, ask the user to open the SVGs and report what they see.
+
+## Phase 1: Understand
+
+- **In:** the content (repo, files, URL, pasted text) and the user's goal (README, talk, social post). No project around it (a spec, an article)? Use the current folder as the project.
+- **Do:** read it. Cut it into **3-6 concepts** that build on each other, basic to advanced. One concept = one idea a viewer can watch in 10-15 s. For each: one-line claim, the facts with citations, what moves.
+  - Content from a URL or paste: save a copy under `assets/explainers/sources/` and cite its line numbers.
+  - **Verify every citation by printing it** (`sed -n '120,128p' file`) before checkpoint 1. Line numbers written from memory are often wrong.
+- **Out:** the concept list in `assets/explainers/STORYBOARD.md`.
+- **Reference:** `references/storyboard.md` (concept extraction).
+
+**Checkpoint 1.** Show the concept list and its facts. Wait for the user's OK or corrections.
+
+At every checkpoint, record what the user changed in a `## Changes` list, kept as the last section of `STORYBOARD.md` (checkpoint, what changed, why); add later sections above it.
+
+## Phase 2: Storyboard
+
+- **In:** approved concepts.
+- **Do:** per concept, fill in the storyboard template: actors, states, timeline in seconds, cited invariants, loop length, the still-frame moment for reduced motion, and the loop-seam check (end state == start state).
+- **Out:** `STORYBOARD.md` complete.
+- **Reference:** `references/storyboard.md` (template + worked example).
+
+**Checkpoint 2.** Show the storyboard. Wait for the OK. Fixing a wrong invariant here costs minutes; fixing it after rendering costs hours.
+
+A new fact, a contradiction in the source, or a changed invariant found later (often by the simulation's asserts) re-opens checkpoint 2 for that concept: update `STORYBOARD.md`, show the change, wait for the OK.
+
+## Phase 3: Build the SVGs
+
+- **In:** approved storyboard.
+- **Do:**
+  1. Copy the engine: `mkdir -p assets/explainers/gen && cp $SKILL/scripts/kfu.py $SKILL/scripts/frames.py $SKILL/assets/base.tpl.svg assets/explainers/gen/`.
+  2. Per concept write `<slug>.tpl.svg` (static layout, from `base.tpl.svg`; concepts sharing one layout may share one template) and `gen_<slug>.py`: simulation → `kfu` keyframes, invariants as `assert`s, then `kfu.render("<slug>.tpl.svg", "../<name>-<slug>.svg", still=<t>)`. Helpers for pools, timers, changing labels and simulated element counts are listed in `references/svg-rules.md`. Simulation code shared by several concepts goes in its own module in `gen/` (e.g. `gen/sim.py`).
+  3. Build: `cd assets/explainers/gen && for g in gen_*.py; do python3 "$g" || exit 1; done`.
+  4. **Look at the frames.** `python3 frames.py ../<name>-<slug>.svg` writes paused-frame contact sheets (light and dark, plus a seam frame to compare with t=0) and prints their paths; `--at 2,5.5` for chosen moments. They land in `assets/explainers/frames/`. Open the PNGs and check each frame against the timeline and the invariants. Then check text size on 2-3 frames at full size: `--at <t1>,<t2> --width 960 --cols 1`. A green build proves nothing about what the viewer sees.
+- **Out:** `assets/explainers/<name>-<slug>.svg` per concept, plus contact sheets.
+- **Reference:** `references/svg-rules.md` (rendering rules, layout, contrast, legend).
+
+**Checkpoint 3.** Show the SVGs and contact sheets. Wait for the OK before any video work.
+
+## Phase 4: Outputs (video, slides)
+
+Ask first, one at a time, unless already answered:
+
+1. **Which outputs:** video, slides, both, or SVGs only?
+2. **Size(s)** for the video: 9:16 (Reels, Shorts, TikTok), 16:9 (YouTube, talks), 1:1 (feeds); several are fine. Slides default to 16:9.
+3. **Voice-over:** none (silent, captions only), `recorded` (they record from `SCRIPT.md`), `piper` (free local TTS), `command` (their own TTS, e.g. a cloud voice; its key stays in their environment), or `tone` (placeholder beeps to check pacing).
+4. **Renderer:** built-in (default, one dependency) or Remotion (parallel renders, Studio preview, `focus` camera moves, Player deck). Before Remotion, ask who it's for: free for individuals, teams of up to 3 and non-profits; companies of 4+ need a Remotion Company License. Unclear → built-in.
+
+Then:
+
+- **In:** approved SVGs, the answers above.
+- **Do:**
+  1. Copy the engine: `mkdir -p assets/explainers/reel && for f in index.html cover.html slides.html reel.css cover.css render.mjs core.mjs scene-dom.mjs motion.mjs audio.mjs package.json voice renderers; do cp -r "$SKILL/reel/$f" assets/explainers/reel/; done && (cd assets/explainers/reel && npm install)`. Remotion: also `cp -r "$SKILL/reel/remotion" assets/explainers/reel/ && (cd assets/explainers/reel/remotion && npm install)`.
+  2. Write `scenes.json` (schema at the top of `index.html`): `sizes`; one scene per concept (title, code or points, diagram, loop `offset`, caption, `say`); an outro; a `cover` block; for slides, `steps` and `slide` overrides; `audio` for a voice; `"renderer": "remotion"` if chosen. First scene visible at frame 0, no intro card.
+  3. `node render.mjs --check` validates it; `node render.mjs --script` writes `SCRIPT.md` from the `say` lines (~2.5 words/s).
+  4. `node render.mjs --timeline` prints each scene's window (voice-fitted) and warns when a diagram would wrap to its loop start inside a scene; fix those first. Then check stills at each scene midpoint and ~1 s before each scene ends: `node render.mjs --at <t1>,<t2>,...` (per size). Look at them: safe zones, text size, diagram aligned with the code panel margins.
+  5. Video: `node render.mjs` (MP4 + SRT per size, voice mixed in), then `node render.mjs --cover`. Check a voiced reel as in `references/audio.md` (ask the user to listen once; you can check timing with `silencedetect`).
+  6. Slides: `node render.mjs --slides`, step through every slide with the keyboard; `node render.mjs --slides --export ../slides` for a static copy.
+- **Out:** `reel.mp4`, `reel.srt`, `cover.png`, `SCRIPT.md`; the deck (served or exported).
+- **References:** `references/reel.md` (layout, safe zones, pacing, offsets, cover, `say`); `references/audio.md` (voice providers, timing, music); `references/slides.md` (steps, overrides, keys); `references/remotion.md` (licence, setup, `focus`).
+
+## Phase 5: Package
+
+- Add rebuild commands where the project keeps them (Makefile target, npm script, or a short `assets/explainers/README.md`).
+- Add to `.gitignore`: `assets/explainers/frames/`, `assets/explainers/reel/node_modules/`, `assets/explainers/reel/still-*.png`, `assets/explainers/reel/vo/`, and with Remotion `assets/explainers/reel/remotion/node_modules/`, `assets/explainers/reel/remotion/deck/public/`, `assets/explainers/reel/remotion/deck/dist/`. Ask whether `reel.mp4`, `reel.srt` and `cover.png` should be committed or ignored (videos are large). Recordings (`recorded` voice) are the user's source files: keep them.
+- Give the user the README embed per SVG: `![<concept>](assets/explainers/<name>-<slug>.svg)`.
+- List every output path. Say which checks you ran by looking (contact sheets, stills) and which you did not.
+
+## Common mistakes
+
+| Mistake | Fix |
+|---|---|
+| Animating from memory of the API | Cite source lines; simulate; assert |
+| Hand-editing a generated SVG | Edit the template or generator, rebuild |
+| Loop jumps at the seam | End state must equal start state; check frames at 0 and D |
+| JavaScript, SMIL, or `offset-path` in the SVG | GitHub's `<img>` ignores them; CSS `@keyframes` only |
+| Only checking the dark theme | Contact sheet in both themes; text keeps 4.5:1 contrast |
+| Text under the platform UI in the video | Keep inside the safe zone from `references/reel.md` |
+| Video starts on a title card | First concept visible at frame 0 |
+| Skipping a checkpoint because "it's obvious" | Checkpoints are where truth gets fixed; never skip |
+| CSS animations or Web Animations inside Remotion components | They ignore the frame clock; derive motion from `useCurrentFrame()` (diagrams already do, via `motion.json`) |
+| API key in `scenes.json` or a command line | The `command` voice reads keys from the user's environment; never write or ask for one |
