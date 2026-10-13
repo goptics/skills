@@ -6,6 +6,7 @@
 //        node render.mjs --cover          cover PNG from cover.html
 //        node render.mjs --serve          live presenter mode: open the printed URL and screen-record
 //        node render.mjs --slides         slide deck (slides.html), keyboard driven; see references/slides.md
+//        node render.mjs --slides --export <dir>   static copy of the deck to host anywhere
 //        node render.mjs --script         SCRIPT.md (voice-over table) from each scene's "say"; no browser
 //        node render.mjs --check          validate scenes.json only
 //        --fps 30   --renderer builtin|remotion (default: scenes.json "renderer", else builtin)   --no-voice
@@ -21,7 +22,7 @@ const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(name); return i < 0 ? def : args.splice(i, 2)[1]; };
 const flag = name => args.includes(name);
 const FPS = Number(opt("--fps", 30));
-const AT = opt("--at", null), SIZE = opt("--size", null), RENDERER = opt("--renderer", null);
+const AT = opt("--at", null), SIZE = opt("--size", null), RENDERER = opt("--renderer", null), EXPORT = opt("--export", null);
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const R = JSON.parse(await readFile(join(HERE, "scenes.json"), "utf8"));
@@ -48,6 +49,11 @@ const voiced = R.audio?.voice && !flag("--no-voice") && !flag("--cover");
 const audio = voiced ? await (await import("./audio.mjs")).prepare(R, HERE, { log: m => console.log(m) }) : null;
 const T = audio?.R ?? R;
 
+if (flag("--slides") && EXPORT) {
+  console.log(`wrote ${await renderer.exportSlides({ R: T, dir: HERE, size: SIZE ?? T.slides?.size ?? "16:9", out: EXPORT })}`);
+  await renderer.close();
+  process.exit(0);
+}
 if (flag("--serve") || flag("--slides")) {
   await renderer.serve({ R: T, dir: HERE, sizes: flag("--slides") && !SIZE ? [T.slides?.size ?? "16:9"] : sizes,
     pages: [flag("--slides") ? "slides.html" : "index.html"] });

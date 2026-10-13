@@ -106,6 +106,22 @@ export default {
     console.log("←/→ scenes, space pause, ctrl+c to stop");
     await new Promise(() => {});
   },
+  /** Static copy of the deck: slides page + engine + scenes.json with every referenced file copied under files/. */
+  async exportSlides({ R, dir, out }) {
+    const { cp, mkdir, writeFile: wf } = await import("node:fs/promises");
+    await mkdir(join(out, "files"), { recursive: true });
+    for (const f of ["slides.html", "reel.css", "core.mjs", "scene-dom.mjs"]) await cp(join(dir, f), join(out, f));
+    const copied = new Map(), local = async p => {
+      if (!p) return p;
+      if (!copied.has(p)) { const name = `files/${copied.size}-${p.split("/").pop()}`; await cp(resolve(dir, p), join(out, name)); copied.set(p, name); }
+      return copied.get(p);
+    };
+    const scenes = [];
+    for (const s of R.scenes) scenes.push({ ...s, diagram: await local(s.diagram), logo: await local(s.logo),
+      ...(s.slide && { slide: { ...s.slide, diagram: await local(s.slide.diagram) } }) });
+    await wf(join(out, "scenes.json"), JSON.stringify({ ...R, root: ".", scenes, cover: undefined }, null, 1));
+    return out;
+  },
   async close() {
     await browser?.close();
     server?.close();
