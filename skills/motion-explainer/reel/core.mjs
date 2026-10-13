@@ -80,12 +80,13 @@ export function highlight(line, lang, pkgs = []) {
 //   scene.say    words for the voice-over; feeds SCRIPT.md, TTS and the slides' speaker notes
 //   scene.steps  [s, …] diagram-loop seconds where slides pause until the presenter advances
 //   scene.slide  { title, points, code, caption, notes, … } overrides used only by slides
+//   scene.focus  { at: [from, to] scene seconds, box: [x, y, w, h] diagram units }  Remotion only: zoom into a region
 //   audio        { voice: { provider: "recorded" | "piper" | "command" | "tone" | <voice/name.mjs>, …provider options },
 //                  music: { file, volume }, lead, tail }
 
 const SCENE_KEYS = new Set(["duration", "type", "step", "title", "code", "lang", "points", "diagram", "offset", "caption",
-  "logo", "lines", "say", "steps", "slide", "voice"]);
-const TOP_KEYS = new Set(["title", "size", "sizes", "lang", "packages", "colors", "root", "scenes", "cover", "audio"]);
+  "logo", "lines", "say", "steps", "slide", "voice", "focus"]);
+const TOP_KEYS = new Set(["title", "size", "sizes", "lang", "packages", "colors", "root", "scenes", "cover", "audio", "renderer", "slides"]);
 
 /** Problems in a scenes.json object, as readable strings ([] = fine). Unknown keys are reported, not ignored. */
 export function validate(R) {
@@ -106,6 +107,11 @@ export function validate(R) {
       if (!s.diagram) bad.push(`${at}: steps need a diagram`);
     }
     if (s.slide !== undefined && (typeof s.slide !== "object" || Array.isArray(s.slide))) bad.push(`${at}: slide must be an object`);
+    if (s.focus !== undefined) {
+      const f = s.focus, ok = f && Array.isArray(f.at) && f.at.length === 2 && f.at[0] < f.at[1] && Array.isArray(f.box) && f.box.length === 4;
+      if (!ok) bad.push(`${at}: focus must be { at: [from, to] scene seconds, box: [x, y, w, h] diagram units }`);
+      if (!s.diagram) bad.push(`${at}: focus needs a diagram`);
+    }
   });
   const v = R.audio?.voice;
   if (R.audio && !v) bad.push("audio: needs a voice block");
