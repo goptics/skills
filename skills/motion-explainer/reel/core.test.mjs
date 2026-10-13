@@ -31,13 +31,13 @@ test("validate: v1 files pass, v2 fields checked, unknown keys reported", async 
                audio: { voice: { provider: "piper" } } };
   assert.deepEqual(validate(ok), []);
   assert.deepEqual(validate({ scenes: [{ duration: 3 }] }), []);
-  const bad = validate({ scenes: [{ duration: 0, steps: [2, 1], sya: "typo" }], audio: { voice: { provider: "tts" } }, extra: 1 });
+  const bad = validate({ scenes: [{ duration: 0, steps: [2, 1], sya: "typo" }], audio: { voice: { provider: "Bad Name" } }, extra: 1 });
   assert.equal(bad.length, 6, bad.join("\n"));
   assert.match(bad.join("\n"), /unknown top-level key "extra"/);
   assert.match(bad.join("\n"), /unknown key "sya"/);
   assert.match(bad.join("\n"), /steps must be increasing/);
   assert.match(bad.join("\n"), /steps need a diagram/);
-  assert.match(bad.join("\n"), /"tts" is not recorded, piper or command/);
+  assert.match(bad.join("\n"), /audio.voice.provider: "Bad Name"/);
 
   assert.deepEqual(slideOf({ title: "A", say: "spoken", slide: { title: "A, longer" } }), { title: "A, longer", say: "spoken", notes: "spoken" });
   assert.equal(slideOf({ say: "x", slide: { notes: "own" } }).notes, "own");
