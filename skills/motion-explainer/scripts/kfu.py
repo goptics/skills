@@ -19,13 +19,19 @@ def kf(name, pts):
     rules.append((name, sorted(pts, key=lambda p: p[0])))
 
 
-def css(name, pts):
-    """@keyframes text for one rule: pads 0% and 100% with the first and last values."""
+def padded(name, pts):
+    """Points with 0 and D added (first / last values held), as CSS gets them."""
     if pts[0][0] > 0:
         pts = [(0, pts[0][1])] + pts
     if pts[-1][0] < D:
         pts = pts + [(D, pts[-1][1])]
     assert pts[-1][0] <= D, f"{name}: keyframe at {pts[-1][0]}s is past the loop end D={D}s"
+    return pts
+
+
+def css(name, pts):
+    """@keyframes text for one rule: pads 0% and 100% with the first and last values."""
+    pts = padded(name, pts)
     body = " ".join(f"{pct(t)} {{ " + " ".join(f"{k}: {v};" for k, v in p.items()) + " }" for t, p in pts)
     return f"    @keyframes {name} {{ {body} }}"
 
@@ -195,17 +201,80 @@ def fill(s, still, legend=None):
     return s.replace("<!--ELEMENTS-->", "\n".join(elements)) if elements else s
 
 
-def render(tpl, out_path, still, legend=None):
+def render(tpl, out_path, still, legend=None, motion=True):
     """Write the SVG: template + one animation-name rule and one @keyframes per kf() call.
 
     tpl is a template path, or the template text itself (starts with "<svg"), so several diagrams can share
-    one template and str.replace() their differences in the generator."""
+    one template and str.replace() their differences in the generator. motion=True also writes
+    <out>.motion.json next to it (see motion_json), for renderers that drive the frames themselves (Remotion)."""
     names = "\n".join(f"    #{n} {{ animation-name: {n}; }}" for n, _ in rules)
     frames = "\n".join(css(n, pts) for n, pts in rules)
-    text = tpl if tpl.lstrip().startswith("<svg") else open(tpl).read()
-    s = fill(text, still, legend).replace("/*KEYFRAMES*/", (names + "\n" + frames).strip())
-    open(out_path, "w").write(s)
+    text = fill(tpl if tpl.lstrip().startswith("<svg") else open(tpl).read(), still, legend)
+    open(out_path, "w").write(text.replace("/*KEYFRAMES*/", (names + "\n" + frames).strip()))
+    if motion:
+        write_motion(out_path)
 
+
+TIMING = r"(cubic-bezier\([^)]*\)|steps\([^)]*\)|linear|ease-in-out|ease-in|ease-out|ease)"
+
+
+def motion_json(svg):
+    """A finished kfu-style SVG as data, for renderers that drive frames themselves (Remotion): the static SVG
+    (keyframes and animation-name bindings removed), loop length D, reduced-motion still, and per animated element
+    and property its keyframes exactly as the CSS has them: [percent of D, value]. Read from the CSS itself, so it
+    works for any generator that writes the same format, and percentages match the SVG to the digit.
+
+    Element easing = the .a rule's timing function, overridden by a class rule that sets animation-timing-function
+    (e.g. .lin), the later rule winning as in CSS. A property a track doesn't set at 0% / 100% falls back to the
+    element's own style there, as in CSS."""
+    import json, re
+    dur = re.search(r"--dur:\s*([\d.]+)s", svg)
+    still = re.search(r"prefers-reduced-motion[^{]*\{[^}]*animation-delay:\s*-([\d.]+)s", svg)
+    assert dur, "no --dur in the SVG"
+    frames = {}
+    for m in re.finditer(r"@keyframes ([\w-]+) \{ ((?:[\d.]+% \{[^}]*\} ?)*)\}", svg):
+        props = {}
+        for b in re.finditer(r"([\d.]+)% \{([^}]*)\}", m[2]):
+            for decl in filter(None, (d.strip() for d in b[2].split(";"))):
+                k, v = (x.strip() for x in decl.split(":", 1))
+                seq = props.setdefault(k, [])
+                if seq and seq[-1][0] == float(b[1]):
+                    seq[-1][1] = v                        # same % twice: the later keyframe wins
+                else:
+                    seq.append([float(b[1]), float(v) if re.fullmatch(r"-?[\d.]+", v) else v])
+        frames[m[1]] = props
+    default = re.search(r"\.a\s*\{[^}]*animation:[^;}]*?" + TIMING, svg)
+    by_class = [(m[1], m[2]) for m in re.finditer(r"\.([\w-]+)\s*\{[^}]*animation-timing-function:\s*" + TIMING, svg)]
+    classes = {}
+    for tag in re.finditer(r"<[a-zA-Z][^>]*>", svg):
+        idm, cm = re.search(r'\bid="([^"]+)"', tag[0]), re.search(r'\bclass="([^"]+)"', tag[0])
+        if idm:
+            classes[idm[1]] = set(cm[1].split()) if cm else set()
+    tracks = {}
+    for m in re.finditer(r"#([\w-]+)\s*\{[^}]*animation-name:\s*([\w-]+)", svg):
+        el, name = m[1], m[2]
+        assert el in classes and name in frames, f"#{el}: animation-name {name} without a matching element or @keyframes"
+        ease = next((f for c, f in reversed(by_class) if c in classes[el]), default[1] if default else "ease")
+        tracks[el] = {"easing": ease, "props": frames[name]}
+    static = re.sub(r"\n?[ \t]*@keyframes [\w-]+ \{ (?:[\d.]+% \{[^}]*\} ?)*\}", "", svg)
+    static = re.sub(r"\n?[ \t]*#[\w-]+ \{ animation-name: [\w-]+; \}", "", static)
+    static = re.sub(r"\s*animation-name:\s*[\w-]+;", "", static)
+    doc = {"format": "motion-explainer/motion@1", "D": float(dur[1]), "still": float(still[1]) if still else 0,
+           "svg": static, "tracks": tracks}
+    return json.dumps(doc, indent=1, ensure_ascii=False) + "\n"
+
+
+def write_motion(svg_path):
+    """<name>.motion.json next to <name>.svg."""
+    out = svg_path.removesuffix(".svg") + ".motion.json"
+    open(out, "w").write(motion_json(open(svg_path).read()))
+    return out
+
+
+if __name__ == "__main__" and len(__import__("sys").argv) > 2 and __import__("sys").argv[1] == "--motion":
+    for f in __import__("sys").argv[2:]:      # python3 kfu.py --motion a.svg …: export motion.json for existing SVGs
+        print(write_motion(f))
+    raise SystemExit
 
 if __name__ == "__main__":  # self-check
     assert pct(4) == "25%" and pct(1) == "6.25%"

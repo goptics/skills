@@ -53,6 +53,7 @@ assets/explainers/
     kfu.py  frames.py  base.tpl.svg
     gen_<slug>.py  <slug>.tpl.svg
   <name>-<slug>.svg          generated; never hand-edit. <name> = short project name, <slug> = concept
+  <name>-<slug>.motion.json  generated with each SVG: its animation as data, for the Remotion renderer
   frames/                    contact sheets and stills for checking (gitignored)
   reel/                      video engine copy + data
     index.html  cover.html  render.mjs  package.json

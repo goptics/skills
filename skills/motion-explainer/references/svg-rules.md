@@ -11,6 +11,7 @@ Load in phase 3. Each rule exists because breaking it broke a real diagram.
 - Times are authored in **seconds**. `kfu` converts them to `%` of the loop length `kfu.D`.
 - **Keyframe name == element `id`**, and the element needs class `a` (`<circle id="job0" class="a dot" .../>`).
 - Never hand-edit the generated SVG. Change the template or the generator and rebuild.
+- `kfu.render` also writes `<name>-<slug>.motion.json`: the static SVG plus every element's keyframes as data, read back from the SVG's own CSS. Renderers that drive frames themselves (Remotion) replay it with `reel/motion.mjs`, which matches the browser's CSS playback to within antialiasing. Commit it with the SVG. `render(..., motion=False)` skips it; `python3 kfu.py --motion x.svg` writes it for an SVG made without `kfu.render`.
 
 `kfu` helpers:
 
